@@ -43,3 +43,4 @@ DROP TRIGGER IF EXISTS trg_sync_query_point_docs ON public.query_points;
 CREATE TRIGGER trg_sync_query_point_docs
   BEFORE INSERT OR UPDATE ON public.query_points
   FOR EACH ROW EXECUTE FUNCTION public.sync_query_point_docs();
+

@@ -6,7 +6,7 @@ export function isGeminiConfigured(): boolean {
 }
 
 export function getGeminiModel(): string {
-  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  return process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 }
 
 export function getGeminiClient(): GoogleGenerativeAI {
@@ -47,6 +47,7 @@ export interface GenerateContentParams {
 
 /**
  * Core helper to execute Gemini multimodal / text calls with structured JSON output
+ * Includes automatic model fallback in case of model deprecation (404) or demand spikes (503).
  */
 export async function generateStructuredContent({
   prompt,
@@ -56,44 +57,52 @@ export async function generateStructuredContent({
   modelName,
 }: GenerateContentParams): Promise<any> {
   const genAI = getGeminiClient();
-  const selectedModel = modelName || getGeminiModel();
+  const preferredModel = modelName || getGeminiModel();
+  const fallbackModels = Array.from(new Set([preferredModel, 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash']));
 
-  const model = genAI.getGenerativeModel({
-    model: selectedModel,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.1, // low temperature for deterministic, factual extraction
-    },
-    systemInstruction: systemInstruction
-      ? {
-          role: 'system',
-          parts: [{ text: systemInstruction }],
-        }
-      : undefined,
-  });
+  let lastError: any = null;
 
-  const parts: any[] = [];
+  for (const currentModelName of fallbackModels) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: currentModelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+        },
+        systemInstruction: systemInstruction
+          ? {
+              role: 'system',
+              parts: [{ text: systemInstruction }],
+            }
+          : undefined,
+      });
 
-  // Add multimodal attachment if provided (PDF / JPG / PNG)
-  if (fileBuffer && mimeType) {
-    parts.push({
-      inlineData: {
-        data: fileBuffer.toString('base64'),
-        mimeType: mimeType === 'image/jpg' ? 'image/jpeg' : mimeType,
-      },
-    });
+      const parts: any[] = [];
+
+      // Add multimodal attachment if provided (PDF / JPG / PNG)
+      if (fileBuffer && mimeType) {
+        parts.push({
+          inlineData: {
+            data: fileBuffer.toString('base64'),
+            mimeType: mimeType === 'image/jpg' ? 'image/jpeg' : mimeType,
+          },
+        });
+      }
+
+      // Add textual prompt
+      parts.push({ text: prompt });
+
+      const result = await model.generateContent(parts);
+      const response = await result.response;
+      const text = response.text();
+      return extractJsonFromText(text);
+    } catch (err: any) {
+      console.warn(`[Gemini SDK] Model "${currentModelName}" warning: ${err.message}. Trying next candidate...`);
+      lastError = err;
+    }
   }
 
-  // Add textual prompt
-  parts.push({ text: prompt });
-
-  try {
-    const result = await model.generateContent(parts);
-    const response = await result.response;
-    const text = response.text();
-    return extractJsonFromText(text);
-  } catch (err: any) {
-    console.error('Gemini API execution error:', err);
-    throw new Error(`Gemini AI Processing Error: ${err.message || 'Unknown error'}`);
-  }
+  console.error('Gemini API all fallback models failed:', lastError);
+  throw new Error(`Gemini AI Processing Error: ${lastError?.message || 'All candidate models failed'}`);
 }

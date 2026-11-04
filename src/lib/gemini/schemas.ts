@@ -111,3 +111,4 @@ export const PatientMessageDraftSchema = z.object({
   closing: z.string(),
   full_message_body: z.string(),
 });
+
