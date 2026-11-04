@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --background: #fbfbfe;
-  --foreground: #1e2433;
+  --background: #FFFFFF;
+  --foreground: #111111;
+  --carefi-purple: #7956B5;
+  --carefi-border: #E7E3EF;
 }
 
 body {
@@ -13,22 +15,21 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
-/* Custom scrollbars */
+/* Custom scrollbars with Care.fi subtle tones */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: #F2EEFA;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #B7A2DE;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #7956B5;
 }
-

@@ -61,6 +61,7 @@ export interface Database {
           role?: UserRole;
           created_at?: string;
         };
+        Relationships: [];
       };
       patients: {
         Row: {
@@ -93,6 +94,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       documents: {
         Row: {
@@ -131,6 +133,7 @@ export interface Database {
           uploaded_at?: string;
           uploaded_by?: string | null;
         };
+        Relationships: [];
       };
       query_letters: {
         Row: {
@@ -175,6 +178,7 @@ export interface Database {
           created_at?: string;
           uploaded_by?: string | null;
         };
+        Relationships: [];
       };
       query_points: {
         Row: {
@@ -216,6 +220,7 @@ export interface Database {
           confidence?: number | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       messages: {
         Row: {
@@ -251,6 +256,7 @@ export interface Database {
           sent_at?: string | null;
           created_at?: string;
         };
+        Relationships: [];
       };
       audit_logs: {
         Row: {
@@ -280,7 +286,20 @@ export interface Database {
           details?: Json;
           created_at?: string;
         };
+        Relationships: [];
       };
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      [_ in never]: never;
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
     };
   };
 }

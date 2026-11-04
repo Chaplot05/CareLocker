@@ -170,8 +170,8 @@ export function DocumentUploader({
         onClick={() => fileInputRef.current?.click()}
         className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition-all ${
           isDragging
-            ? 'border-peach-500 bg-peach-50/40'
-            : 'border-slate-200 bg-lavender-50/30 hover:border-lavender-400 hover:bg-lavender-50/50'
+            ? 'border-[#7956B5] bg-[#F2EEFA]'
+            : 'border-[#E7E3EF] bg-[#F2EEFA]/20 hover:border-[#7956B5] hover:bg-[#F2EEFA]/40'
         }`}
       >
         <input
@@ -265,7 +265,7 @@ export function DocumentUploader({
                   {item.status === 'error' && (
                     <span
                       title={item.errorMessage}
-                      className="inline-flex items-center gap-1 text-peach-600 font-semibold cursor-help"
+                      className="inline-flex items-center gap-1 text-red-600 font-semibold cursor-help"
                     >
                       <AlertCircle className="h-3.5 w-3.5" /> Error
                     </span>
@@ -282,7 +282,7 @@ export function DocumentUploader({
                 type="button"
                 onClick={uploadAll}
                 disabled={isUploading}
-                className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-peach-600 active:scale-[0.98] transition-all disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#111111] px-5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-[#171417] active:scale-[0.98] transition-all disabled:opacity-50"
               >
                 {isUploading ? (
                   <>
@@ -291,7 +291,7 @@ export function DocumentUploader({
                   </>
                 ) : (
                   <>
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-3.5 w-3.5 text-[#B7A2DE]" />
                     <span>Confirm & Upload {pendingCount} Document{pendingCount > 1 ? 's' : ''}</span>
                   </>
                 )}

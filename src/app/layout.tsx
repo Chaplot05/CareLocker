@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'CareLocker | Patient Document & Query Management',
+  title: 'Care.locker | Patient Document & Query Management',
   description: 'Enterprise healthcare document management and insurance query automation platform.',
 };
 

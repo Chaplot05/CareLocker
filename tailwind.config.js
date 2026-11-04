@@ -8,37 +8,50 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        lavender: {
-          50: '#f8f7fd',
-          100: '#f0eeff',
-          200: '#e3defb',
-          300: '#cec3f8',
-          400: '#a894f0',
-          500: '#8462e7',
-          600: '#6c44da',
-          700: '#5832c3',
-          800: '#482a9f',
-          900: '#3c2580',
+        carefi: {
+          primary: '#111111',
+          dark: '#171417',
+          purple: '#7956B5',
+          'purple-hover': '#6947A3',
+          lavender: '#B7A2DE',
+          light: '#F2EEFA',
+          white: '#FFFFFF',
+          border: '#E7E3EF',
+          muted: '#6B7280',
         },
+        lavender: {
+          50: '#F2EEFA',
+          100: '#EBE4F7',
+          200: '#D8CCE8',
+          300: '#C8B7E2',
+          400: '#B7A2DE',
+          500: '#9576C8',
+          600: '#7956B5', // Care.fi Brand purple
+          700: '#6947A3',
+          800: '#533783',
+          900: '#171417',
+        },
+        // Map legacy peach references to Care.fi brand purple & primary tones
         peach: {
-          50: '#fff5f3',
-          100: '#ffe8e4',
-          200: '#ffd3cc',
-          300: '#fcaaa0',
-          400: '#f77668',
-          500: '#ea4f3f', // reddish peach primary
-          600: '#d53424',
-          700: '#b2271a',
-          800: '#932419',
-          900: '#7a221a',
+          50: '#F2EEFA',
+          100: '#EBE4F7',
+          200: '#D8CCE8',
+          300: '#B7A2DE',
+          400: '#9576C8',
+          500: '#7956B5', // Care.fi purple primary
+          600: '#6947A3',
+          700: '#533783',
+          800: '#171417',
+          900: '#111111',
         },
         brand: {
-          dark: '#1e2433', // navy grey
-          sidebar: '#171b26',
-        }
+          dark: '#111111',
+          sidebar: '#FFFFFF',
+          purple: '#7956B5',
+          border: '#E7E3EF',
+        },
       },
     },
   },
   plugins: [],
 };
-

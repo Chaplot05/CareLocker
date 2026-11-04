@@ -72,30 +72,27 @@ export default async function DashboardPage() {
       label: 'Registered Patients',
       value: totalPatients,
       icon: Users,
-      color: 'from-lavender-500 to-lavender-700',
-      textColor: 'text-lavender-700',
-      bgColor: 'bg-lavender-50',
-      borderColor: 'border-lavender-200',
+      textColor: 'text-[#7956B5]',
+      bgColor: 'bg-[#F2EEFA]',
+      borderColor: 'border-[#E7E3EF]',
       href: '/patients',
     },
     {
       label: 'Patient Documents',
       value: totalDocuments,
       icon: FolderLock,
-      color: 'from-peach-500 to-peach-600',
-      textColor: 'text-peach-600',
-      bgColor: 'bg-peach-50',
-      borderColor: 'border-peach-200',
+      textColor: 'text-[#111111]',
+      bgColor: 'bg-[#F8F7FB]',
+      borderColor: 'border-[#E7E3EF]',
       href: '/patients',
     },
     {
       label: 'Insurer Query Letters',
       value: totalQueries,
       icon: FileQuestion,
-      color: 'from-blue-600 to-indigo-600',
-      textColor: 'text-blue-700',
-      bgColor: 'bg-blue-50',
-      borderColor: 'border-blue-200',
+      textColor: 'text-[#7956B5]',
+      bgColor: 'bg-[#F2EEFA]',
+      borderColor: 'border-[#E7E3EF]',
       href: '/patients',
     },
     {
@@ -103,10 +100,9 @@ export default async function DashboardPage() {
       value: 'Private RLS',
       subtext: 'Encrypted & signed',
       icon: ShieldCheck,
-      color: 'from-emerald-600 to-teal-600',
-      textColor: 'text-emerald-700',
-      bgColor: 'bg-emerald-50',
-      borderColor: 'border-emerald-200',
+      textColor: 'text-[#111111]',
+      bgColor: 'bg-[#F8F7FB]',
+      borderColor: 'border-[#E7E3EF]',
       href: '/settings',
     },
   ];
@@ -128,10 +124,10 @@ export default async function DashboardPage() {
             <Link
               key={card.label}
               href={card.href}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:border-lavender-300 hover:shadow-md transition-all"
+              className="group relative overflow-hidden rounded-2xl border border-[#E7E3EF] bg-white p-5 shadow-2xs hover:border-[#7956B5] transition-all"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#6B7280]">
                   {card.label}
                 </span>
                 <div className={`rounded-xl p-2.5 ${card.bgColor} ${card.textColor} border ${card.borderColor}`}>
@@ -140,16 +136,16 @@ export default async function DashboardPage() {
               </div>
               <div className="mt-4 flex items-baseline justify-between">
                 <div>
-                  <span className="text-3xl font-bold tracking-tight text-slate-900">
+                  <span className="text-3xl font-black tracking-tight text-[#111111]">
                     {card.value}
                   </span>
                   {card.subtext && (
-                    <span className="ml-2 text-xs font-medium text-slate-400">
+                    <span className="ml-2 text-xs font-semibold text-[#6B7280]">
                       {card.subtext}
                     </span>
                   )}
                 </div>
-                <ArrowUpRight className="h-4 w-4 text-slate-300 group-hover:text-peach-500 transition-colors" />
+                <ArrowUpRight className="h-4 w-4 text-[#B7A2DE] group-hover:text-[#7956B5] transition-colors" />
               </div>
             </Link>
           );
@@ -254,34 +250,34 @@ export default async function DashboardPage() {
             <div className="space-y-2.5">
               <Link
                 href="/patients/new"
-                className="flex items-center justify-between rounded-xl border border-peach-200 bg-peach-50/50 p-3 text-xs font-semibold text-peach-900 hover:bg-peach-50 transition-colors"
+                className="flex items-center justify-between rounded-xl border border-[#E7E3EF] bg-[#F2EEFA]/60 p-3 text-xs font-semibold text-[#111111] hover:bg-[#F2EEFA] transition-colors"
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="rounded-lg bg-peach-500 p-1.5 text-white">
+                  <div className="rounded-lg bg-[#111111] p-1.5 text-white">
                     <Plus className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-slate-900">Add New Patient</p>
-                    <p className="text-[11px] text-slate-500">Create individual document locker</p>
+                    <p className="text-xs font-bold text-[#111111]">Add New Patient</p>
+                    <p className="text-[11px] text-[#6B7280]">Create individual document locker</p>
                   </div>
                 </div>
-                <ArrowUpRight className="h-4 w-4 text-peach-600" />
+                <ArrowUpRight className="h-4 w-4 text-[#7956B5]" />
               </Link>
 
               <Link
                 href="/patients"
-                className="flex items-center justify-between rounded-xl border border-lavender-200 bg-lavender-50/50 p-3 text-xs font-semibold text-lavender-900 hover:bg-lavender-50 transition-colors"
+                className="flex items-center justify-between rounded-xl border border-[#E7E3EF] bg-white p-3 text-xs font-semibold text-[#111111] hover:bg-[#F2EEFA]/40 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="rounded-lg bg-lavender-600 p-1.5 text-white">
+                  <div className="rounded-lg bg-[#7956B5] p-1.5 text-white">
                     <Users className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-slate-900">Bulk CSV Import</p>
-                    <p className="text-[11px] text-slate-500">Import hospital patient batch</p>
+                    <p className="text-xs font-bold text-[#111111]">Bulk CSV Import</p>
+                    <p className="text-[11px] text-[#6B7280]">Import hospital patient batch</p>
                   </div>
                 </div>
-                <ArrowUpRight className="h-4 w-4 text-lavender-700" />
+                <ArrowUpRight className="h-4 w-4 text-[#7956B5]" />
               </Link>
             </div>
           </div>

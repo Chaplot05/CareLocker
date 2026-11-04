@@ -115,47 +115,47 @@ export default function PatientsPage() {
           {/* Add Patient */}
           <Link
             href="/patients/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-peach-500 px-4 py-2 text-xs font-semibold text-white hover:bg-peach-600 active:scale-[0.98] transition-all shadow-xs"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-4 py-2 text-xs font-bold text-white hover:bg-[#171417] active:scale-[0.98] transition-all shadow-2xs"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5 text-[#B7A2DE]" />
             <span>Register Patient</span>
           </Link>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-center gap-3 rounded-xl border border-peach-200 bg-peach-50 p-4 text-xs text-peach-800">
-          <AlertCircle className="h-4 w-4 shrink-0 text-peach-600" />
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Patients Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+      <div className="overflow-hidden rounded-2xl border border-[#E7E3EF] bg-white shadow-xs">
         {isLoading ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3">
-            <Loader2 className="h-7 w-7 animate-spin text-peach-500" />
-            <p className="text-xs text-slate-400">Loading patients from Supabase database...</p>
+            <Loader2 className="h-7 w-7 animate-spin text-[#7956B5]" />
+            <p className="text-xs text-[#6B7280]">Loading patients from Supabase database...</p>
           </div>
         ) : patients.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center">
-            <div className="rounded-full bg-slate-50 p-3 text-slate-400 mb-3 border border-slate-100">
+            <div className="rounded-full bg-[#F2EEFA] p-3 text-[#7956B5] mb-3 border border-[#E7E3EF]">
               <Users className="h-8 w-8" />
             </div>
-            <h4 className="text-sm font-semibold text-slate-800">No patients registered</h4>
-            <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
+            <h4 className="text-sm font-bold text-[#111111]">No patients registered</h4>
+            <p className="text-xs text-[#6B7280] max-w-sm mt-1 mb-4">
               Get started by adding an individual patient profile or bulk importing via CSV.
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => setIsCsvModalOpen(true)}
-                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-[#E7E3EF] px-3 py-1.5 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA]"
               >
                 Upload CSV
               </button>
               <Link
                 href="/patients/new"
-                className="rounded-xl bg-peach-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-peach-600"
+                className="rounded-xl bg-[#111111] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#171417]"
               >
                 Add First Patient
               </Link>

@@ -41,7 +41,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#fbfbfe]">
+    <div className="min-h-screen bg-white">
       <Sidebar userEmail={userEmail} userRole={userRole} userName={userName} />
 
       {/* Main Content Area */}

@@ -73,8 +73,8 @@ export function PatientForm({ initialData, isEditing = false }: PatientFormProps
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-peach-200 bg-peach-50 p-4 text-sm text-peach-800">
-          <AlertCircle className="h-5 w-5 shrink-0 text-peach-600" />
+        <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
           <span>{error}</span>
         </div>
       )}
@@ -86,15 +86,15 @@ export function PatientForm({ initialData, isEditing = false }: PatientFormProps
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-5">
-        <h2 className="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3">
+      <div className="rounded-2xl border border-[#E7E3EF] bg-white p-6 shadow-xs space-y-5">
+        <h2 className="text-base font-bold text-[#111111] border-b border-[#E7E3EF] pb-3">
           Patient Identification & Contact Details
         </h2>
 
         {/* Patient Code */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
-            Patient Code / Identifier <span className="text-peach-500">*</span>
+          <label className="block text-xs font-bold uppercase tracking-wider text-[#111111] mb-1.5">
+            Patient Code / Identifier <span className="text-[#7956B5]">*</span>
           </label>
           <div className="flex gap-2">
             <input
@@ -201,11 +201,11 @@ export function PatientForm({ initialData, isEditing = false }: PatientFormProps
         <button
           type="submit"
           disabled={isLoading}
-          className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-peach-600 active:scale-[0.98] transition-all disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#111111] px-6 py-2.5 text-sm font-bold text-white shadow-2xs hover:bg-[#171417] active:scale-[0.98] transition-all disabled:opacity-50"
         >
           {isLoading ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin text-[#B7A2DE]" />
               <span>Saving Patient...</span>
             </>
           ) : (

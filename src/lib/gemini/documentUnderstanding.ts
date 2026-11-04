@@ -2,21 +2,31 @@ import { createClient, isSupabaseServerConfigured } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateStructuredContent, isGeminiConfigured } from './client';
 import { DocumentUnderstandingSchema } from './schemas';
-import { DocumentAiSummary } from '@/types';
+import { DocumentAiSummary, Document } from '@/types';
+
+export interface AnalyzeDocumentResult {
+  success: boolean;
+  summary?: DocumentAiSummary;
+  document?: Document;
+  error?: string;
+}
 
 /**
  * Feature 1: Document Understanding
  * Reads medical document from Supabase private storage and extracts structured summary with Gemini multimodal.
+ * Saves validated summary to documents.ai_summary and selects/verifies the persisted value.
  */
 export async function analyzePatientDocument(
   documentId: string,
   providedSupabase?: any
-): Promise<{ success: boolean; summary?: DocumentAiSummary; error?: string }> {
-  try {
-    const supabase = providedSupabase || (isSupabaseServerConfigured() ? createClient() : createAdminClient());
+): Promise<AnalyzeDocumentResult> {
+  const adminSupabase = createAdminClient();
 
-    // 1. Fetch document metadata
-    const { data: document, error: fetchError } = (await supabase
+  try {
+    const supabase = providedSupabase || adminSupabase;
+
+    // 1. Fetch document metadata with patient details
+    const { data: document, error: fetchError } = (await adminSupabase
       .from('documents')
       .select('*, patients(id, patient_code, name)')
       .eq('id', documentId)
@@ -41,20 +51,23 @@ export async function analyzePatientDocument(
         error: 'GEMINI_API_KEY_MISSING',
       };
 
-      await supabase
+      const { data: updatedDoc } = await adminSupabase
         .from('documents')
         .update({ ai_summary: unconfiguredSummary as any })
-        .eq('id', documentId);
+        .eq('id', documentId)
+        .select('*')
+        .single();
 
       return {
         success: false,
         summary: unconfiguredSummary,
+        document: updatedDoc as unknown as Document,
         error: 'GEMINI_API_KEY is not configured in .env.local',
       };
     }
 
     // 2. Download file buffer from private Supabase Storage
-    const { data: fileData, error: downloadError } = await supabase.storage
+    const { data: fileData, error: downloadError } = await adminSupabase.storage
       .from('patient-documents')
       .download(document.file_path);
 
@@ -115,7 +128,7 @@ Return a strictly valid JSON object matching the following structure:
   "confidence_score": 0.95
 }`;
 
-    // 4. Execute Gemini multimodal call
+    // 4. Execute Gemini multimodal call with automatic retries and fallback
     const rawAiResult = await generateStructuredContent({
       prompt,
       systemInstruction,
@@ -139,18 +152,26 @@ Return a strictly valid JSON object matching the following structure:
           analyzed_at: new Date().toISOString(),
         };
 
-    // 6. Save validated summary to documents table
-    const { error: updateError } = await supabase
+    // 6. Save summary securely and select persisted record
+    const { data: savedDocument, error: updateError } = await adminSupabase
       .from('documents')
       .update({ ai_summary: validSummary as any })
-      .eq('id', documentId);
+      .eq('id', documentId)
+      .select('*')
+      .single();
 
     if (updateError) {
-      console.error('Failed to update document ai_summary:', updateError);
+      throw new Error(`Failed to save AI summary: ${updateError.message}`);
     }
 
+    if (!savedDocument || !savedDocument.ai_summary) {
+      throw new Error('AI summary was not saved in the database.');
+    }
+
+    const persistedSummary = savedDocument.ai_summary as unknown as DocumentAiSummary;
+
     // 7. Audit log
-    await supabase.from('audit_logs').insert({
+    await adminSupabase.from('audit_logs').insert({
       action: 'ANALYZE_DOCUMENT',
       entity_type: 'document',
       entity_id: documentId,
@@ -162,21 +183,26 @@ Return a strictly valid JSON object matching the following structure:
       },
     } as any);
 
-    return { success: true, summary: validSummary };
+    return {
+      success: true,
+      summary: persistedSummary,
+      document: savedDocument as unknown as Document,
+    };
   } catch (err: any) {
     console.error(`Document understanding error for ${documentId}:`, err);
 
-    // Save error state in ai_summary so staff can see failure details
+    // Save error state in ai_summary so staff can see failure details in the modal
     try {
-      const supabase = providedSupabase || (isSupabaseServerConfigured() ? createClient() : createAdminClient());
-      await supabase
+      const errorSummary = {
+        error: err.message,
+        analyzed_at: new Date().toISOString(),
+        confidence_score: 0,
+      };
+
+      await adminSupabase
         .from('documents')
         .update({
-          ai_summary: {
-            error: err.message,
-            analyzed_at: new Date().toISOString(),
-            confidence_score: 0,
-          } as any,
+          ai_summary: errorSummary as any,
         })
         .eq('id', documentId);
     } catch {
@@ -186,4 +212,3 @@ Return a strictly valid JSON object matching the following structure:
     return { success: false, error: err.message };
   }
 }
-

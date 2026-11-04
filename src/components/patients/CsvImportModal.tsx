@@ -132,8 +132,8 @@ PAT-2026-103,Rohan Chawla,+91 97170 33445,rohan.chawla@example.com,1979-03-21`;
         </div>
 
         {error && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-peach-200 bg-peach-50 p-3.5 text-sm text-peach-800">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-peach-600" />
+          <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-800">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
             <span>{error}</span>
           </div>
         )}
@@ -193,7 +193,7 @@ PAT-2026-103,Rohan Chawla,+91 97170 33445,rohan.chawla@example.com,1979-03-21`;
                   setFile(null);
                   setPreviewRows([]);
                 }}
-                className="text-xs font-semibold text-peach-600 hover:text-peach-700"
+                className="text-xs font-bold text-[#7956B5] hover:text-[#6947A3]"
               >
                 Change File
               </button>
@@ -247,7 +247,7 @@ PAT-2026-103,Rohan Chawla,+91 97170 33445,rohan.chawla@example.com,1979-03-21`;
             type="button"
             disabled={!previewRows.length || isImporting}
             onClick={handleImport}
-            className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-peach-600 disabled:opacity-50 transition-all"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#111111] px-5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-[#171417] disabled:opacity-50 transition-all"
           >
             {isImporting ? (
               <>

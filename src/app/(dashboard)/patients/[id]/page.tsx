@@ -136,7 +136,7 @@ export default function PatientDetailPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-lavender-500 to-peach-500 text-white shadow-md text-xl font-bold">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#7956B5] text-white shadow-2xs text-xl font-black">
               {patient.name.charAt(0).toUpperCase()}
             </div>
             <div>
@@ -188,14 +188,14 @@ export default function PatientDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200">
-        <nav className="flex space-x-6 text-sm font-semibold">
+      <div className="border-b border-[#E7E3EF]">
+        <nav className="flex space-x-6 text-sm font-bold">
           <button
             onClick={() => setActiveTab('documents')}
             className={`flex items-center gap-2 pb-3 border-b-2 transition-all ${
               activeTab === 'documents'
-                ? 'border-peach-500 text-slate-900 font-bold'
-                : 'border-transparent text-slate-400 hover:text-slate-700'
+                ? 'border-[#7956B5] text-[#111111] font-bold'
+                : 'border-transparent text-[#6B7280] hover:text-[#111111]'
             }`}
           >
             <FolderLock className="h-4 w-4" />
@@ -206,8 +206,8 @@ export default function PatientDetailPage() {
             onClick={() => setActiveTab('queries')}
             className={`flex items-center gap-2 pb-3 border-b-2 transition-all ${
               activeTab === 'queries'
-                ? 'border-peach-500 text-slate-900 font-bold'
-                : 'border-transparent text-slate-400 hover:text-slate-700'
+                ? 'border-[#7956B5] text-[#111111] font-bold'
+                : 'border-transparent text-[#6B7280] hover:text-[#111111]'
             }`}
           >
             <FileQuestion className="h-4 w-4" />
@@ -218,8 +218,8 @@ export default function PatientDetailPage() {
             onClick={() => setActiveTab('audit')}
             className={`flex items-center gap-2 pb-3 border-b-2 transition-all ${
               activeTab === 'audit'
-                ? 'border-peach-500 text-slate-900 font-bold'
-                : 'border-transparent text-slate-400 hover:text-slate-700'
+                ? 'border-[#7956B5] text-[#111111] font-bold'
+                : 'border-transparent text-[#6B7280] hover:text-[#111111]'
             }`}
           >
             <History className="h-4 w-4" />
@@ -234,7 +234,7 @@ export default function PatientDetailPage() {
           <DocumentUploader
             patientId={patient.id}
             patientCode={patient.patient_code}
-            onUploadComplete={() => fetchPatient()}
+            onUploadComplete={() => fetchPatient(true)}
           />
 
           <div>
@@ -243,7 +243,7 @@ export default function PatientDetailPage() {
             </h3>
             <DocumentList
               documents={patient.documents || []}
-              onDocumentDeleted={() => fetchPatient()}
+              onDocumentDeleted={() => fetchPatient(true)}
               userRole={userRole}
             />
           </div>
@@ -266,29 +266,29 @@ export default function PatientDetailPage() {
             <button
               type="button"
               onClick={() => setIsQueryModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-4 py-2 text-xs font-semibold text-white hover:bg-peach-600 shadow-sm transition-all shrink-0 active:scale-[0.98]"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#111111] px-4 py-2 text-xs font-bold text-white hover:bg-[#171417] shadow-2xs transition-all shrink-0 active:scale-[0.98]"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4 text-[#B7A2DE]" />
               <span>Upload Query Letter</span>
             </button>
           </div>
 
           {(!patient.query_letters || patient.query_letters.length === 0) ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
-              <div className="rounded-full bg-peach-50 p-3 text-peach-600 mb-3 mx-auto w-fit border border-peach-200 shadow-2xs">
+            <div className="rounded-2xl border border-dashed border-[#E7E3EF] bg-white p-12 text-center">
+              <div className="rounded-full bg-[#F2EEFA] p-3 text-[#7956B5] mb-3 mx-auto w-fit border border-[#E7E3EF] shadow-2xs">
                 <FileQuestion className="h-8 w-8" />
               </div>
-              <h4 className="text-sm font-semibold text-slate-800">No Query Letters Uploaded</h4>
-              <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 mb-4">
+              <h4 className="text-sm font-bold text-[#111111]">No Query Letters Uploaded</h4>
+              <p className="text-xs text-[#6B7280] max-w-md mx-auto mt-1 mb-4">
                 Whenever Star Health, Medi Assist, Care, or other TPAs raise queries, upload the letter here.
                 Gemini will extract every requirement, match against vault documents, and draft a patient WhatsApp request.
               </p>
               <button
                 type="button"
                 onClick={() => setIsQueryModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-4 py-2 text-xs font-semibold text-white hover:bg-peach-600 shadow-sm"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#111111] px-4 py-2 text-xs font-bold text-white hover:bg-[#171417] shadow-2xs"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 text-[#B7A2DE]" />
                 <span>Upload First Query Letter</span>
               </button>
             </div>

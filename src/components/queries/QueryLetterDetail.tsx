@@ -21,6 +21,11 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Send,
+  Phone,
+  Mail,
+  Clock,
+  AlertCircle,
 } from 'lucide-react';
 import { QueryLetter, QueryPoint, Document, Message } from '@/types';
 import { formatDate, formatDateTime, getDecisionBadge } from '@/lib/utils';
@@ -49,12 +54,19 @@ export function QueryLetterDetail({
   const [reprocessError, setReprocessError] = useState<string | null>(null);
 
   // Message draft state
-  const queryMessage = messages.find((m) => m.query_letter_id === queryLetter.id);
+  const whatsAppMessage = messages.find((m) => m.query_letter_id === queryLetter.id && m.channel === 'WhatsApp');
+  const emailMessage = messages.find((m) => m.query_letter_id === queryLetter.id && m.channel === 'Email');
+  const queryMessage = whatsAppMessage || emailMessage || messages.find((m) => m.query_letter_id === queryLetter.id);
   const [draftContent, setDraftContent] = useState(queryMessage?.message_content || '');
   const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isRegeneratingDraft, setIsRegeneratingDraft] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
+
+  // Stage 3: Multi-channel delivery state
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
 
   // Preview supporting doc modal
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
@@ -134,6 +146,46 @@ export function QueryLetterDetail({
     }
   };
 
+  const handleSendNotifications = async (channel?: 'WhatsApp' | 'Email') => {
+    setIsSendingNotification(true);
+    setSendError(null);
+    setSendSuccess(null);
+    try {
+      const res = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query_letter_id: queryLetter.id,
+          channel,
+          force: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to dispatch notifications');
+      }
+
+      const waStatus = data.result?.whatsapp?.status;
+      const emStatus = data.result?.email?.status;
+
+      let msg = 'Dispatch finished. ';
+      if (channel === 'WhatsApp') {
+        msg = waStatus === 'sent' ? 'WhatsApp message dispatched successfully!' : `WhatsApp dispatch: ${waStatus}`;
+      } else if (channel === 'Email') {
+        msg = emStatus === 'sent' ? 'Email dispatched successfully!' : `Email dispatch: ${emStatus}`;
+      } else {
+        msg = `Dispatched: WhatsApp (${waStatus}), Email (${emStatus})`;
+      }
+
+      setSendSuccess(msg);
+      onRefresh();
+    } catch (err: any) {
+      setSendError(err.message || 'Notification dispatch failed');
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
   const handlePreviewSupportingDoc = async (doc: Document) => {
     setPreviewDoc(doc);
     setPreviewSignedUrl(null);
@@ -197,18 +249,18 @@ export function QueryLetterDetail({
       case 'failed':
         return {
           label: 'Processing Failed',
-          bg: 'bg-peach-100',
-          text: 'text-peach-700',
-          border: 'border-peach-300',
+          bg: 'bg-red-50',
+          text: 'text-red-700',
+          border: 'border-red-200',
           icon: AlertTriangle,
         };
       case 'uploaded':
       default:
         return {
           label: 'Uploaded',
-          bg: 'bg-blue-50',
-          text: 'text-blue-700',
-          border: 'border-blue-200',
+          bg: 'bg-[#F2EEFA]',
+          text: 'text-[#7956B5]',
+          border: 'border-[#E7E3EF]',
           icon: FileText,
         };
     }
@@ -218,15 +270,15 @@ export function QueryLetterDetail({
   const StatusIcon = statusBadge.icon;
 
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+    <div className="space-y-6 rounded-2xl border border-[#E7E3EF] bg-white p-6 shadow-xs">
       {/* Query Letter Header Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E7E3EF] pb-5">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="rounded-xl bg-peach-50 p-2 text-peach-600 border border-peach-200">
+            <div className="rounded-xl bg-[#F2EEFA] p-2 text-[#7956B5] border border-[#E7E3EF]">
               <FileText className="h-5 w-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">{queryLetter.file_name}</h3>
+            <h3 className="text-base font-bold text-[#111111]">{queryLetter.file_name}</h3>
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider border ${statusBadge.bg} ${statusBadge.text} ${statusBadge.border}`}
             >
@@ -412,18 +464,18 @@ export function QueryLetterDetail({
       </div>
 
       {/* Feature 5: Patient Notification Draft Card */}
-      <div className="rounded-2xl border border-peach-200 bg-peach-50/40 p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-peach-200/60 pb-3">
+      <div className="rounded-2xl border border-[#E7E3EF] bg-[#F2EEFA]/40 p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7E3EF] pb-3">
           <div className="flex items-center gap-2">
-            <div className="rounded-xl bg-peach-500 p-2 text-white shadow-xs">
+            <div className="rounded-xl bg-[#7956B5] p-2 text-white shadow-2xs">
               <MessageSquare className="h-4 w-4" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-slate-900">
+              <h4 className="text-sm font-bold text-[#111111]">
                 Patient Notification Message Draft
               </h4>
-              <p className="text-[11px] text-slate-500">
-                Automated plain-language request requesting <strong className="text-peach-700">ONLY genuinely missing items</strong>.
+              <p className="text-[11px] text-[#6B7280]">
+                Automated plain-language request requesting <strong className="text-[#7956B5]">ONLY genuinely missing items</strong>.
               </p>
             </div>
           </div>
@@ -432,7 +484,7 @@ export function QueryLetterDetail({
             <button
               type="button"
               onClick={handleCopyMessage}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3 py-1.5 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA] shadow-2xs transition-colors"
             >
               {hasCopied ? (
                 <>
@@ -441,7 +493,7 @@ export function QueryLetterDetail({
                 </>
               ) : (
                 <>
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="h-3.5 w-3.5 text-[#7956B5]" />
                   <span>Copy Message</span>
                 </>
               )}
@@ -451,16 +503,16 @@ export function QueryLetterDetail({
               type="button"
               onClick={handleRegenerateDraft}
               disabled={isRegeneratingDraft}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3 py-1.5 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA] shadow-2xs transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRegeneratingDraft ? 'animate-spin text-peach-500' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${isRegeneratingDraft ? 'animate-spin text-[#7956B5]' : 'text-[#7956B5]'}`} />
               <span>{isRegeneratingDraft ? 'Regenerating...' : 'Regenerate'}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setIsEditingDraft(!isEditingDraft)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-peach-300 bg-peach-100 px-3 py-1.5 text-xs font-semibold text-peach-900 hover:bg-peach-200 shadow-2xs transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3 py-1.5 text-xs font-bold text-[#7956B5] hover:bg-[#F2EEFA] shadow-2xs transition-colors"
             >
               <Edit2 className="h-3.5 w-3.5" />
               <span>{isEditingDraft ? 'Cancel Edit' : 'Edit Draft'}</span>
@@ -475,13 +527,13 @@ export function QueryLetterDetail({
               rows={8}
               value={draftContent}
               onChange={(e) => setDraftContent(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-800 font-sans focus:border-lavender-500 focus:outline-none"
+              className="w-full rounded-xl border border-[#E7E3EF] p-3 text-xs text-[#111111] font-sans focus:border-[#7956B5] focus:outline-none"
             />
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsEditingDraft(false)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="rounded-xl border border-[#E7E3EF] bg-white px-3 py-1.5 text-xs font-bold text-[#6B7280] hover:bg-[#F2EEFA]"
               >
                 Cancel
               </button>
@@ -489,7 +541,7 @@ export function QueryLetterDetail({
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={isSavingDraft}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-peach-500 px-4 py-1.5 text-xs font-semibold text-white hover:bg-peach-600 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#171417] disabled:opacity-50 shadow-2xs"
               >
                 <Save className="h-3.5 w-3.5" />
                 <span>{isSavingDraft ? 'Saving...' : 'Save Draft Changes'}</span>
@@ -497,17 +549,211 @@ export function QueryLetterDetail({
             </div>
           </div>
         ) : (
-          <div className="rounded-xl bg-white p-4 border border-slate-200 text-xs text-slate-800 font-sans whitespace-pre-wrap leading-relaxed shadow-2xs">
+          <div className="rounded-xl bg-white p-4 border border-[#E7E3EF] text-xs text-[#111111] font-sans whitespace-pre-wrap leading-relaxed shadow-2xs">
             {draftContent || queryMessage?.message_content || 'No draft message generated yet.'}
           </div>
         )}
 
-        {/* Stage 3 Notice */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-          <span>Target channel: WhatsApp / SMS (Patient contact: {patientName})</span>
-          <span className="font-semibold text-lavender-700 bg-lavender-50 px-2 py-0.5 rounded border border-lavender-200">
-            Stage 3: Automated WhatsApp & Email Dispatch
-          </span>
+        {/* Feedback alerts */}
+        {sendError && (
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+            <span>{sendError}</span>
+          </div>
+        )}
+        {sendSuccess && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{sendSuccess}</span>
+          </div>
+        )}
+
+        {/* Multi-Channel Delivery Tracking Cards */}
+        <div className="pt-2 border-t border-[#E7E3EF] space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="font-bold text-[#111111] text-xs flex items-center gap-1.5">
+                <Send className="h-3.5 w-3.5 text-[#7956B5]" />
+                <span>Automated Multi-Channel Notification Dispatch</span>
+              </span>
+              <p className="text-[11px] text-[#6B7280]">
+                Independent real-time delivery tracking for WhatsApp and Gmail SMTP
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleSendNotifications()}
+              disabled={isSendingNotification}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#171417] shadow-2xs transition-colors disabled:opacity-50"
+            >
+              {isSendingNotification ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Dispatching...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="h-3.5 w-3.5 text-[#B7A2DE]" />
+                  <span>{whatsAppMessage || emailMessage ? 'Resend Notifications' : 'Dispatch Notifications'}</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {/* WhatsApp Channel Card */}
+            <div className="rounded-xl border border-emerald-200 bg-white p-3.5 space-y-2.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-emerald-100 p-1.5 text-emerald-800">
+                    <Phone className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-900 text-xs block">Twilio WhatsApp</span>
+                    <span className="text-[10px] text-slate-400">Sandbox messaging</span>
+                  </div>
+                </div>
+
+                {whatsAppMessage ? (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                      whatsAppMessage.delivery_status === 'sent' || whatsAppMessage.delivery_status === 'delivered'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : whatsAppMessage.delivery_status === 'failed'
+                        ? 'bg-red-50 text-red-800 border-red-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}
+                  >
+                    {whatsAppMessage.delivery_status === 'sent' || whatsAppMessage.delivery_status === 'delivered' ? (
+                      <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    ) : whatsAppMessage.delivery_status === 'failed' ? (
+                      <XCircle className="h-3 w-3 text-red-600" />
+                    ) : (
+                      <Clock className="h-3 w-3 text-amber-600" />
+                    )}
+                    <span className="capitalize">{whatsAppMessage.delivery_status}</span>
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-slate-200">
+                    Not Dispatched
+                  </span>
+                )}
+              </div>
+
+              {whatsAppMessage && (
+                <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Provider SID:</span>
+                    <span className="font-mono text-slate-800 truncate max-w-[180px]">
+                      {whatsAppMessage.provider_message_id || '—'}
+                    </span>
+                  </div>
+                  {whatsAppMessage.sent_at && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Sent At:</span>
+                      <span className="font-medium text-slate-800">
+                        {formatDateTime(whatsAppMessage.sent_at)}
+                      </span>
+                    </div>
+                  )}
+                  {whatsAppMessage.delivery_status === 'failed' && whatsAppMessage.provider_message_id && (
+                    <div className="p-2 mt-1 rounded-lg bg-red-50 border border-red-100 text-[10px] text-red-700">
+                      {whatsAppMessage.provider_message_id}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleSendNotifications('WhatsApp')}
+                  disabled={isSendingNotification}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isSendingNotification ? 'animate-spin' : ''}`} />
+                  <span>{whatsAppMessage ? 'Retry WhatsApp' : 'Send WhatsApp'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Email Channel Card */}
+            <div className="rounded-xl border border-blue-200 bg-white p-3.5 space-y-2.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-blue-100 p-1.5 text-blue-800">
+                    <Mail className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-900 text-xs block">Gmail SMTP Email</span>
+                    <span className="text-[10px] text-slate-400">Nodemailer delivery</span>
+                  </div>
+                </div>
+
+                {emailMessage ? (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
+                      emailMessage.delivery_status === 'sent' || emailMessage.delivery_status === 'delivered'
+                        ? 'bg-blue-50 text-blue-800 border-blue-200'
+                        : emailMessage.delivery_status === 'failed'
+                        ? 'bg-red-50 text-red-800 border-red-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}
+                  >
+                    {emailMessage.delivery_status === 'sent' || emailMessage.delivery_status === 'delivered' ? (
+                      <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                    ) : emailMessage.delivery_status === 'failed' ? (
+                      <XCircle className="h-3 w-3 text-red-600" />
+                    ) : (
+                      <Clock className="h-3 w-3 text-amber-600" />
+                    )}
+                    <span className="capitalize">{emailMessage.delivery_status}</span>
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-slate-200">
+                    Not Dispatched
+                  </span>
+                )}
+              </div>
+
+              {emailMessage && (
+                <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-2">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Message ID:</span>
+                    <span className="font-mono text-slate-800 truncate max-w-[180px]">
+                      {emailMessage.provider_message_id || '—'}
+                    </span>
+                  </div>
+                  {emailMessage.sent_at && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Sent At:</span>
+                      <span className="font-medium text-slate-800">
+                        {formatDateTime(emailMessage.sent_at)}
+                      </span>
+                    </div>
+                  )}
+                  {emailMessage.delivery_status === 'failed' && emailMessage.provider_message_id && (
+                    <div className="p-2 mt-1 rounded-lg bg-red-50 border border-red-100 text-[10px] text-red-700">
+                      {emailMessage.provider_message_id}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleSendNotifications('Email')}
+                  disabled={isSendingNotification}
+                  className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isSendingNotification ? 'animate-spin' : ''}`} />
+                  <span>{emailMessage ? 'Retry Email' : 'Send Email'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -522,7 +768,7 @@ export function QueryLetterDetail({
         <div className="space-y-4">
           {isLoadingSignedUrl ? (
             <div className="flex h-64 items-center justify-center">
-              <RefreshCw className="h-6 w-6 animate-spin text-peach-500" />
+              <RefreshCw className="h-6 w-6 animate-spin text-[#7956B5]" />
             </div>
           ) : previewSignedUrl ? (
             <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900/5">

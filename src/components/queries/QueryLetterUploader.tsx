@@ -116,8 +116,8 @@ export function QueryLetterUploader({
     >
       <form onSubmit={handleUploadAndProcess} className="space-y-4 text-xs">
         {error && (
-          <div className="flex items-center gap-2 rounded-xl border border-peach-200 bg-peach-50 p-3 text-peach-800">
-            <AlertCircle className="h-4 w-4 shrink-0 text-peach-600" />
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-red-800">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
             <span>{error}</span>
           </div>
         )}
@@ -126,7 +126,7 @@ export function QueryLetterUploader({
         {!file ? (
           <label
             onClick={() => fileInputRef.current?.click()}
-            className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center cursor-pointer hover:border-peach-500 hover:bg-peach-50/20 transition-all"
+            className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#E7E3EF] p-8 text-center cursor-pointer hover:border-[#7956B5] hover:bg-[#F2EEFA]/30 transition-all"
           >
             <input
               type="file"
@@ -135,23 +135,23 @@ export function QueryLetterUploader({
               onChange={handleFileChange}
               className="hidden"
             />
-            <div className="rounded-xl bg-peach-100 p-3 text-peach-600 mb-3 shadow-2xs">
+            <div className="rounded-xl bg-[#F2EEFA] p-3 text-[#7956B5] mb-3 border border-[#E7E3EF] shadow-2xs">
               <UploadCloud className="h-6 w-6" />
             </div>
-            <p className="text-sm font-semibold text-slate-800">
+            <p className="text-sm font-bold text-[#111111]">
               Select Query Letter (PDF or Image)
             </p>
-            <p className="text-[11px] text-slate-400 mt-1">
+            <p className="text-[11px] text-[#6B7280] mt-1">
               Supports Star Health, Medi Assist, Care, HDFC Ergo, ICICI, etc. (Max 20MB)
             </p>
           </label>
         ) : (
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-center justify-between rounded-xl border border-[#E7E3EF] bg-[#F2EEFA]/40 p-3">
             <div className="flex items-center gap-2.5">
-              <FileText className="h-5 w-5 text-peach-600" />
+              <FileText className="h-5 w-5 text-[#7956B5]" />
               <div>
-                <p className="font-semibold text-slate-900">{file.name}</p>
-                <p className="text-[11px] text-slate-400">
+                <p className="font-bold text-[#111111]">{file.name}</p>
+                <p className="text-[11px] text-[#6B7280]">
                   {(file.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
               </div>
@@ -229,7 +229,7 @@ export function QueryLetterUploader({
           <button
             type="submit"
             disabled={!file || isProcessing}
-            className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-5 py-2 font-semibold text-white shadow-sm hover:bg-peach-600 disabled:opacity-50 transition-all"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#111111] px-5 py-2 font-bold text-white shadow-2xs hover:bg-[#171417] disabled:opacity-50 transition-all"
           >
             {isProcessing ? (
               <>

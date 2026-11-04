@@ -1,18 +1,26 @@
-import { createClient, isSupabaseServerConfigured } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { extractQueryLetterPoints } from './queryExtraction';
 import { matchQueryPointsWithDocuments } from './documentMatching';
 import { generatePatientDraftMessage } from './messageDrafting';
+import { dispatchQueryNotification, MultiChannelDispatchResult } from '@/lib/messaging/dispatcher';
+
+export interface QueryPipelineResult {
+  success: boolean;
+  status: string;
+  dispatchResult?: MultiChannelDispatchResult;
+  error?: string;
+}
 
 /**
- * Complete Stage 2 End-to-End AI Processing Pipeline
- * Executes: Extract Requirements -> Match with Patient Vault Documents -> Generate Patient Message Draft.
+ * Complete End-to-End Processing Pipeline:
+ * Stage 2: Extract Requirements -> Match with Patient Vault Documents -> Generate Patient Message Draft.
+ * Stage 3: Automatically Dispatch through WhatsApp AND Email if genuinely missing items exist.
  */
 export async function runQueryLetterPipeline(
   queryLetterId: string,
   providedSupabase?: any
-): Promise<{ success: boolean; status: string; error?: string }> {
-  const supabase = providedSupabase || (isSupabaseServerConfigured() ? createClient() : createAdminClient());
+): Promise<QueryPipelineResult> {
+  const supabase = providedSupabase || createAdminClient();
 
   try {
     console.log(`[AI Pipeline] Starting processing for query letter ${queryLetterId}`);
@@ -45,11 +53,33 @@ export async function runQueryLetterPipeline(
       console.warn(`[AI Pipeline] Draft message warning: ${draftResult.error}`);
     }
 
+    // Step 4: Stage 3 Automatic Multi-channel Delivery (WhatsApp AND Email)
+    console.log(`[AI Pipeline] Step 4: Executing Stage 3 automated multi-channel delivery...`);
+    let dispatchOutcome: MultiChannelDispatchResult | undefined;
+
+    try {
+      dispatchOutcome = await dispatchQueryNotification({
+        queryLetterId,
+        force: false,
+      });
+
+      console.log(`[AI Pipeline] Automated delivery outcome:`, {
+        missingCount: dispatchOutcome.missingCount,
+        skippedAll: dispatchOutcome.skippedAll,
+        skipReason: dispatchOutcome.skipReason,
+        whatsappStatus: dispatchOutcome.whatsapp.status,
+        emailStatus: dispatchOutcome.email.status,
+      });
+    } catch (dispatchErr: any) {
+      console.error(`[AI Pipeline] Automated notification dispatch error:`, dispatchErr);
+    }
+
     console.log(`[AI Pipeline] Pipeline successfully finished for query letter ${queryLetterId}`);
 
     return {
       success: true,
       status: 'completed',
+      dispatchResult: dispatchOutcome,
     };
   } catch (err: any) {
     console.error(`[AI Pipeline] Pipeline failed for query letter ${queryLetterId}:`, err);
@@ -69,4 +99,3 @@ export async function runQueryLetterPipeline(
     };
   }
 }
-

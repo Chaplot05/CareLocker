@@ -1,196 +1,207 @@
-# CareLocker 🏥🔐
-### Patient Document Management & Insurance Query Automation Platform
+# Care.locker 🏥🔐
+### Patient Document Management & Automated Insurance Query Resolution
 
-CareLocker is an enterprise healthcare SaaS application built for hospital billing, TPA desk staff, and insurance operations teams. It streamlines patient document storage, analyzes medical records using multimodal AI, extracts discrete requirements from insurer query letters, matches requirements against existing vault documents, and drafts patient-friendly notifications.
+**Care.locker** is an enterprise-grade healthcare operations platform built for hospital billing departments, TPA desk coordinators, and insurance operations teams. It consolidates patient medical records into a secure private vault, uses Google Gemini multimodal AI to analyze medical records and insurer query letters, forensically matches requirements against uploaded evidence, and automatically dispatches patient document requests across WhatsApp and Email.
 
 ---
 
 ## 📑 Table of Contents
-1. [Architecture & Technology Stack](#-architecture--technology-stack)
-2. [Stage 1: Foundation & Vault](#-stage-1-foundation--vault)
-3. [Stage 2: Complete AI Processing Engine](#-stage-2-complete-ai-processing-engine)
-4. [Folder Structure](#-folder-structure)
-5. [Database Migrations](#-database-migrations)
-6. [Setup & Environment Variables](#-setup--environment-variables)
-7. [Running the Test Suite](#-running-the-test-suite)
-8. [First Admin Account Guide](#-first-admin-account-guide)
-9. [Future Stage 3 Roadmap](#-future-stage-3-roadmap)
+1. [Key Features](#-key-features)
+2. [Technology Stack](#-technology-stack)
+3. [Architecture Overview](#-architecture-overview)
+4. [Project Structure](#-project-structure)
+5. [Local Development Setup](#-local-development-setup)
+6. [Environment Variables](#-environment-variables)
+7. [Database Migrations](#-database-migrations)
+8. [Testing & Verification](#-testing--verification)
+9. [Deploying to Vercel](#-deploying-to-vercel)
 
 ---
 
-## 🏗 Technology Stack
+## 🚀 Key Features
 
-- **Framework**: [Next.js 14 (App Router)](https://nextjs.org/)
-- **Language**: TypeScript (Strict typing)
-- **Styling**: Tailwind CSS (Custom palette: Crisp White, Light Lavender `#8462e7`, Reddish Peach `#ea4f3f`, Clean Slate Grey)
-- **Icons**: Lucide React
-- **Database & Storage**: Supabase PostgreSQL & Private Supabase Storage (`patient-documents`)
-- **Authentication**: Supabase Auth (Email & Password, Session Cookies via `@supabase/ssr`)
-- **AI Processing Engine (Stage 2)**: Google Gemini API (Multimodal SDK `@google/genai` & `@google/generative-ai`)
-- **Schema Validation**: Zod runtime validation
-- **CSV Processing**: PapaParse
+### 1. 🗄️ Secure Document Vault & Patient Directory
+- **Role-Based Access**: Multi-tenant authorization for `Admin` and `Agent` roles with Next.js edge middleware.
+- **Private Supabase Storage**: Uploads (PDF, PNG, JPG) stored in a private bucket (`patient-documents`) served via short-lived signed URLs (5-minute expiry).
+- **Document Categories**: 9 structured medical categories (Discharge Summaries, Itemized Bills, Pharmacy Bills, Lab Reports, Diagnostic Imaging, OT Notes, Prescriptions, Pre-auth Approvals, Other).
+- **Document Deletion & Evidence Invalidation**: Safe document deletion with explicit confirmation. Automatically cleans up storage and marks affected query matching points as `needs_review` to prevent stale adjudication results.
 
----
+### 2. 🧠 Multimodal Clinical AI (Google Gemini)
+- **Document Understanding**: Automatically processes clinical and billing records to extract hospital names, dates, financial summaries, diagnoses, procedures, and insurance relevancy.
+- **Query Requirement Extraction**: Ingests insurer query letters (Star Health, Medi Assist, Care Health, HDFC ERGO, etc.) and extracts verbatim bullet points into structured requirements.
+- **Forensic Document Matching**: Adjudicates each query point against vault documents with verifiable evidence quotes and confidence scoring. Differentiates between `available`, genuinely `missing`, and `needs_review`.
 
-## 🚀 Stage 1: Foundation & Vault
+### 3. 📲 Automated Multi-Channel Dispatch (WhatsApp & Email)
+- **Automatic Notification Engine**: Generates empathetic, plain-language patient notifications requesting *only* genuinely missing documents (excluding available and unverified items).
+- **Twilio WhatsApp Integration**: Formatted dispatch via WhatsApp Sandbox with strict 15-second timeouts, provider SID recording, and robust error handling (21654 / 63015).
+- **Nodemailer Gmail SMTP**: Direct, reliable email delivery to patient addresses.
+- **Channel Independence & Idempotency**: Failures on WhatsApp never block email dispatch and vice versa. Full delivery history and provider responses recorded in PostgreSQL.
 
-- **Staff Authentication**: Role-based access control with `Admin` and `Agent` roles.
-- **Route Protection**: Next.js Edge Middleware guarding `/dashboard`, `/patients`, `/settings`.
-- **Patient Management**: Searchable directory, masked contact info toggle, manual creation with code generator (`PAT-YYYY-XXX`), and bulk CSV import.
-- **Document Locker**: Multi-file drag & drop, 9 medical categories, validation, short-lived signed URLs (5-minute expiry), and admin deletion.
-
----
-
-## 🤖 Stage 2: Complete AI Processing Engine
-
-### Feature 1 — Document Understanding
-- Whenever medical documents (PDFs, JPG, PNG) are uploaded to the vault, the server retrieves the file from private Supabase Storage.
-- Gemini multimodal AI analyzes clinical and billing contents without hallucinations.
-- Extracts:
-  - Document type & category
-  - Patient identifiers (hospital ID, UHID, policy number, claim number)
-  - Crucial dates (admission, discharge, bill, report dates)
-  - Hospital name & treating consultant
-  - Total billing amounts (claimed, paid, discounts)
-  - Clinical diagnoses, surgical procedures, and key findings
-  - Insurance claim relevance
-- Validated with Zod and saved in `documents.ai_summary` (JSONB).
-- Viewable in the UI via the **"AI Summary"** button on any document.
-
-### Feature 2 — Query Requirement Extraction
-- Upload insurer query letters from Star Health, Medi Assist, Care Health, HDFC Ergo, etc.
-- Gemini multimodal parses the original PDF/image.
-- Extracts every distinct requirement, preserving the **exact verbatim text**.
-- Maps each requirement to the expected document category and context reason.
-- Saved into `query_points`.
-
-### Feature 3 — Document Matching Adjudication
-- Compares each query requirement against all patient document summaries.
-- Adjudication rules:
-  - **Never marks available by category alone**. Verifies factual content, dates, and invoice details.
-  - Returns `available` only when satisfied with verifiable evidence quotes.
-  - **Multi-document support**: Satisfied across multiple separate files (e.g. OT surgical note + Anesthesia log).
-  - Returns `missing` if the item is absent from the vault.
-  - Returns `needs_review` if wording is ambiguous, contradictory, or requires consultant justification.
-  - Includes confidence score (0.0 to 1.0) and forensic reasoning.
-
-### Feature 4 — Results UI
-- Query letter dashboard in patient profile with real-time status transitions: `uploaded` → `extracting` → `matching` → `completed` / `failed`.
-- Summary scoreboard: Total, Available, Missing, and Needs Review counts.
-- Interactive requirements list with status badges, category tags, evidence blockquotes, medical reasoning, and clickable supporting document pills opening secure preview modals.
-- Safe retry button (`/api/queries/[id]/reprocess`) to re-evaluate letters idempotently.
-
-### Feature 5 — Patient Notification Draft
-- Automatically drafts an empathetic, plain-language patient request.
-- **Requests ONLY genuinely missing items**; excludes available and uncertain (`needs_review`) items.
-- In-app preview with 1-click **"Copy Message"**, **"Regenerate Draft"**, and **"Edit Draft"**.
-- Prepares for automated WhatsApp/Email dispatch in Stage 3.
+### 4. 🎨 Modern Minimalist Interface
+- High-contrast, clean theme inspired by **Care.fi** (`#111111` deep darks, `#7956B5` brand purple, `#F2EEFA` soft surfaces, `#E7E3EF` borders) with zero noisy gradients.
 
 ---
 
-## 📁 Folder Structure
+## 🛠️ Technology Stack
 
+- **Frontend**: [Next.js 14](https://nextjs.org/) (App Router, Server Components & Route Handlers), React 18, TypeScript (Strict Mode)
+- **Styling**: Tailwind CSS, Lucide React Icons
+- **Database & Auth**: [Supabase](https://supabase.com/) (PostgreSQL 15, Row Level Security, Supabase Auth via `@supabase/ssr`, Private Storage)
+- **AI Engine**: Google Gemini API (`gemini-3.5-flash` / `@google/genai`)
+- **Messaging**:
+  - WhatsApp: Twilio Node SDK (`twilio`)
+  - Email: Nodemailer with Gmail SMTP
+- **Validation**: Zod schema validation
+- **Testing**: Jest, TypeScript compiler (`tsc --noEmit`)
+
+---
+
+## 🏗️ Architecture Overview
+
+```mermaid
+flowchart LR
+    A["Hospital / TPA Staff"] -->|Uploads Records| B["Care.locker (Next.js 14)"]
+    B -->|Encrypted Storage| C["Supabase Private Bucket"]
+    B -->|Metadata & RLS| D["Supabase PostgreSQL"]
+    B -->|Multimodal Analysis| E["Google Gemini AI"]
+    E -->|Extracted Summaries| D
+    E -->|Query Adjudication| D
+    D -->|Missing Items Trigger| F["Notification Dispatcher"]
+    F -->|WhatsApp Sandbox| G["Twilio Messaging API"]
+    F -->|Email SMTP| H["Gmail Nodemailer"]
+    G -->|WhatsApp Message| I["Patient"]
+    H -->|Email Notification| I
 ```
+
+---
+
+## 📁 Project Structure
+
+```text
 carelocker/
 ├── scripts/
-│   ├── seed.mjs                                 # Synthetic DB seeder
-│   └── test-stage2.ts                           # Comprehensive Stage 2 test suite
+│   ├── seed.mjs                       # Database seeder
+│   ├── test-stage2.ts                 # Gemini AI pipeline verification suite
+│   ├── test-stage3.ts                 # Multi-channel delivery tests
+│   └── test-document-deletion.ts      # Deletion & evidence safety test
 ├── src/
 │   ├── app/
-│   │   ├── (auth)/login/page.tsx                # Staff login & admin setup guide
+│   │   ├── (auth)/login/              # Staff authentication
 │   │   ├── (dashboard)/
-│   │   │   ├── dashboard/page.tsx               # Analytics dashboard
-│   │   │   ├── patients/page.tsx                # Directory & CSV import
-│   │   │   ├── patients/[id]/page.tsx           # Profile, Locker & Query History
-│   │   │   └── settings/page.tsx                # RBAC & Gemini status
-│   │   ├── api/
-│   │   │   ├── documents/route.ts               # Upload & AI analysis trigger
-│   │   │   ├── documents/[id]/analyze/route.ts  # Manual re-analyze endpoint
-│   │   │   ├── queries/route.ts                 # Upload & pipeline trigger
-│   │   │   ├── queries/[id]/route.ts            # Query details & admin delete
-│   │   │   ├── queries/[id]/draft/route.ts      # Regenerate & edit draft message
-│   │   │   └── queries/[id]/reprocess/route.ts  # Safe retry mechanism
+│   │   │   ├── dashboard/             # Overview metrics & claim status
+│   │   │   ├── patients/              # Patient directory & detail vaults
+│   │   │   └── settings/              # System & staff configuration
+│   │   └── api/                       # Secure server endpoints (documents, queries, messages)
 │   ├── components/
-│   │   ├── documents/
-│   │   │   ├── DocumentList.tsx                 # Locker table with AI Summary button
-│   │   │   └── DocumentSummaryModal.tsx         # AI Clinical Summary viewer
-│   │   └── queries/
-│   │       ├── QueryLetterUploader.tsx          # Query letter upload modal
-│   │       └── QueryLetterDetail.tsx            # Adjudication cards & draft message
+│   │   ├── common/                    # Modal, Badge, Button components
+│   │   ├── documents/                 # Document list, uploader & summary modal
+│   │   ├── layout/                    # Header and Care.locker Sidebar
+│   │   ├── patients/                  # Patient cards & forms
+│   │   └── queries/                   # Query letter processing & match UI
 │   ├── lib/
-│   │   ├── gemini/
-│   │   │   ├── client.ts                        # Gemini SDK & multimodal caller
-│   │   │   ├── schemas.ts                       # Zod validation schemas
-│   │   │   ├── documentUnderstanding.ts         # Feature 1: Clinical extractor
-│   │   │   ├── queryExtraction.ts               # Feature 2: Requirements extractor
-│   │   │   ├── documentMatching.ts              # Feature 3: Forensic matcher
-│   │   │   ├── messageDrafting.ts               # Feature 5: Patient message drafter
-│   │   │   └── pipeline.ts                      # Pipeline orchestrator
+│   │   ├── gemini/                    # Gemini client, schemas & prompt pipeline
+│   │   ├── messaging/                 # Twilio, Nodemailer & dispatcher engine
+│   │   └── supabase/                  # Browser, server & admin clients
 │   └── types/
-│       ├── database.ts                          # Supabase PostgreSQL schema
-│       └── index.ts                             # Application types
-└── supabase/
-    └── migrations/
-        ├── 20261104000001_initial_schema.sql    # Stage 1 tables & RLS
-        └── 20261104000002_stage2_query_matching.sql # Stage 2 status & multi-doc support
+│       └── database.ts                # TypeScript Supabase database definitions
+├── supabase/
+│   └── migrations/                    # SQL schemas, RLS policies, audit logs
+├── .env.example                       # Reference environment variables
+└── README.md
 ```
 
 ---
 
-## ⚙ Setup & Environment Variables
+## 💻 Local Development Setup
 
-Copy `.env.example` to `.env.local`:
+### 1. Prerequisites
+- [Node.js](https://nodejs.org/) v18 or later (v20+ recommended)
+- A [Supabase](https://supabase.com) project
+- A [Google AI Studio](https://aistudio.google.com/) API Key
+- (Optional for messaging) Twilio Account & Gmail App Password
 
+### 2. Installation
 ```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# Clone the repository
+git clone https://github.com/Chaplot05/CareLocker.git
+cd CareLocker
 
-# Stage 2: Google Gemini Multimodal AI
-GEMINI_API_KEY=AIzaSy...
-GEMINI_MODEL=gemini-2.5-flash
+# Install dependencies
+npm install
 ```
 
-Execute both migrations in Supabase SQL Editor:
-1. `supabase/migrations/20261104000001_initial_schema.sql`
-2. `supabase/migrations/20261104000002_stage2_query_matching.sql`
+### 3. Configure Environment Variables
+Copy `.env.example` to `.env.local` and add your credentials:
+```bash
+cp .env.example .env.local
+```
+
+### 4. Database Schema Setup
+Execute the SQL migration files located in `supabase/migrations/` sequentially in your Supabase SQL Editor:
+1. `20261104000000_stage1_foundation.sql` (Tables: `profiles`, `patients`, `documents`, `audit_logs`, storage bucket)
+2. `20261104000001_stage2_query_automation.sql` (Tables: `query_letters`, `query_points`, `document_matches`)
+3. `20261104000002_stage3_messaging.sql` (Table: `messages` & indexes)
+4. `20261104000003_documents_update_policy.sql` (RLS policies for document updates)
+
+### 5. Start the Development Server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🧪 Running the Test Suite
+## 🔑 Environment Variables
 
-Execute the Stage 2 AI validation test suite:
+| Variable | Description | Exposure |
+| :--- | :--- | :--- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL | Public / Client |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon Key | Public / Client |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Admin Key | Server-only |
+| `NEXT_PUBLIC_SITE_URL` | Canonical Site URL (`http://localhost:3000`) | Public / Client |
+| `GEMINI_API_KEY` | Google Gemini API Key | Server-only |
+| `GEMINI_MODEL` | Gemini Model (e.g., `gemini-3.5-flash`) | Server-only |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID | Server-only |
+| `TWILIO_AUTH_TOKEN` | Twilio Auth Token | Server-only |
+| `TWILIO_WHATSAPP_NUMBER` | Twilio WhatsApp Sender Number | Server-only |
+| `SMTP_HOST` | SMTP Server (e.g., `smtp.gmail.com`) | Server-only |
+| `SMTP_PORT` | SMTP Port (`587`) | Server-only |
+| `SMTP_USER` | SMTP Username / Gmail address | Server-only |
+| `SMTP_PASS` | Gmail App Password | Server-only |
+| `SMTP_FROM_EMAIL` | Sender Email Address | Server-only |
+
+---
+
+## 🧪 Testing & Verification
+
+Run the test suite and type checker:
 
 ```bash
+# Run unit tests
 npm test
+
+# Type-check TypeScript without emitting output
+npx tsc --noEmit
+
+# Test production build
+npm run build
 ```
 
-Runs 18 unit tests validating:
-- Feature 1: Document understanding schema & clinical/billing extraction
-- Feature 2: Query requirement separation, verbatim text preservation
-- Feature 3: Multi-document matching, evidence quotes, ambiguous `needs_review`
-- Feature 5: Patient message drafting requesting **only missing items**
-
 ---
 
-## 🔑 First Admin Account Guide
+## 🌐 Deploying to Vercel
 
-1. Go to **Supabase Console → Authentication → Users → Add User**.
-2. Enter email (e.g. `admin@carelocker.health`) and password.
-3. In SQL Editor, run:
-   ```sql
-   UPDATE public.profiles
-   SET role = 'admin', full_name = 'Hospital Administrator'
-   WHERE email = 'admin@carelocker.health';
+1. Push your code to GitHub:
+   ```bash
+   git add .
+   git commit -m "feat: complete Care.locker platform"
+   git push origin master
    ```
-4. Log in at `http://localhost:3000/login`.
+2. Import the project into [Vercel](https://vercel.com/new).
+3. In **Project Settings** → **Environment Variables**, add the environment variables defined in `.env.example`.
+4. Deploy! Next.js App Router will automatically compile serverless endpoints and edge middleware.
 
 ---
 
-## 🔮 Future Stage 3 Roadmap
-
-- **Twilio WhatsApp Sandbox**: Direct 1-click dispatch of the generated patient draft message.
-- **Nodemailer / Gmail SMTP**: Automated email notification dispatch.
-- **Delivery Webhooks**: Real-time status tracking (`sent`, `delivered`, `read`) in `messages`.
+## 🛡️ License
+Private & Proprietary — Developed for healthcare operations.

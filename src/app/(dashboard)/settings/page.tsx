@@ -68,8 +68,8 @@ export default async function SettingsPage() {
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
               hasGemini
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                : 'bg-peach-100 text-peach-700 border border-peach-200'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                : 'bg-red-50 text-red-700 border border-red-200'
             }`}
           >
             {hasGemini ? 'Active & Ready' : 'Key Missing'}
@@ -100,40 +100,40 @@ export default async function SettingsPage() {
           </div>
         </div>
 
-        <div className="rounded-xl bg-lavender-50/60 p-4 border border-lavender-100 text-xs text-slate-700 space-y-1.5">
-          <span className="font-semibold text-lavender-950 block">AI Processing Guarantees:</span>
-          <p className="text-slate-600">
+        <div className="rounded-xl bg-[#F2EEFA]/60 p-4 border border-[#E7E3EF] text-xs text-[#111111] space-y-1.5">
+          <span className="font-bold text-[#111111] block">AI Processing Guarantees:</span>
+          <p className="text-[#6B7280]">
             • <strong>Never marks available by category alone</strong>: Compares actual clinical text, invoice breakups, and dates.
           </p>
-          <p className="text-slate-600">
+          <p className="text-[#6B7280]">
             • <strong>Multi-document Support</strong>: Identifies when requirements are satisfied across multiple separate files.
           </p>
-          <p className="text-slate-600">
+          <p className="text-[#6B7280]">
             • <strong>Zero Hallucinations</strong>: If facts are ambiguous or contradictory, marks <code className="bg-white px-1 py-0.5 rounded font-mono text-amber-800 border border-amber-200">needs_review</code>.
           </p>
-          <p className="text-slate-600">
-            • <strong>Patient Messages</strong>: Requests <strong className="text-peach-700">ONLY genuinely missing items</strong>, omitting already available documents.
+          <p className="text-[#6B7280]">
+            • <strong>Patient Messages</strong>: Requests <strong className="text-[#7956B5]">ONLY genuinely missing items</strong>, omitting already available documents.
           </p>
         </div>
       </div>
 
       {/* Staff Account Info */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+      <div className="rounded-2xl border border-[#E7E3EF] bg-white p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-[#E7E3EF] pb-4">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-slate-100 p-2 text-slate-700">
+            <div className="rounded-xl bg-[#F2EEFA] p-2 text-[#7956B5]">
               <UserCheck className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Current Staff Profile</h2>
-              <p className="text-xs text-slate-400">Authenticated Supabase user session</p>
+              <h2 className="text-base font-bold text-[#111111]">Current Staff Profile</h2>
+              <p className="text-xs text-[#6B7280]">Authenticated Supabase user session</p>
             </div>
           </div>
           <span
             className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
               userProfile?.role === 'admin'
-                ? 'bg-peach-100 text-peach-700 border border-peach-200'
-                : 'bg-lavender-100 text-lavender-800 border border-lavender-200'
+                ? 'bg-[#111111] text-white'
+                : 'bg-[#7956B5] text-white'
             }`}
           >
             {userProfile?.role || 'Agent'} Role

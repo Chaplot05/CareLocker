@@ -56,16 +56,16 @@ export function Modal({
 
       {/* Modal Dialog */}
       <div
-        className={`relative w-full ${maxWidthClasses[maxWidth]} overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-100 transition-all z-10 my-8`}
+        className={`relative w-full ${maxWidthClasses[maxWidth]} overflow-hidden rounded-2xl bg-white shadow-xl border border-[#E7E3EF] transition-all z-10 my-8`}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/60">
+        <div className="flex items-center justify-between border-b border-[#E7E3EF] px-6 py-4 bg-[#FAFAFC]">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-            {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+            <h3 className="text-lg font-bold text-[#111111]">{title}</h3>
+            {description && <p className="text-xs text-[#6B7280] mt-0.5">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors"
+            className="rounded-lg p-1.5 text-[#6B7280] hover:bg-[#F2EEFA] hover:text-[#7956B5] transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
