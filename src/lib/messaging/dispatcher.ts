@@ -26,14 +26,16 @@ export interface MultiChannelDispatchResult {
 }
 
 /**
- * Feature 3 & 4: Stage 3 Multi-Channel Automatic Notification Dispatcher
- * Dispatches notification through WhatsApp AND Email independently.
+ * Stage 3 Multi-Channel Automatic Notification Dispatcher
+ * Dispatches notification through WhatsApp AND Email with complete channel independence.
+ *
  * Implements:
  * - Missing-documents gating (sends only if genuinely missing documents exist)
+ * - True parallel execution via Promise.allSettled: Twilio delays or errors NEVER block Email
  * - Per-query and per-channel duplicate send prevention
- * - Safe retry capabilities
- * - Detailed message persistence & provider ID tracking in Supabase messages table
- * - Audit logging
+ * - Safe manual retry / send fallback
+ * - Full delivery status & provider message ID tracking in Supabase messages table
+ * - Comprehensive audit logging
  */
 export async function dispatchQueryNotification({
   queryLetterId,
@@ -78,7 +80,7 @@ export async function dispatchQueryNotification({
   const points: any[] = letter.query_points || [];
   const missingPoints = points.filter((p) => p.decision_status === 'missing');
 
-  // Gating rule: Do NOT send anything if there are no missing documents (unless forced by staff)
+  // Gating rule: Do NOT send anything if there are no missing documents (unless forced by staff manual action)
   if (missingPoints.length === 0 && !force) {
     console.log(`[Dispatcher] Query letter ${queryLetterId} has 0 missing documents. Automatic notification suppressed.`);
     return {
@@ -100,11 +102,12 @@ export async function dispatchQueryNotification({
 
   const messageContent = draftResult.messageContent;
 
-  // 3. Fetch existing message records for duplicate prevention
+  // 3. Fetch existing message records for duplicate prevention, ordered latest first
   const { data: existingMessages } = (await adminSupabase
     .from('messages')
     .select('*')
-    .eq('query_letter_id', queryLetterId)) as { data: any[] };
+    .eq('query_letter_id', queryLetterId)
+    .order('created_at', { ascending: false })) as { data: any[] };
 
   const existingWhatsApp = (existingMessages || []).find((m) => m.channel === 'WhatsApp');
   const existingEmail = (existingMessages || []).find((m) => m.channel === 'Email');
@@ -112,27 +115,37 @@ export async function dispatchQueryNotification({
   const shouldSendWhatsApp = !channelToRetry || channelToRetry === 'WhatsApp';
   const shouldSendEmail = !channelToRetry || channelToRetry === 'Email';
 
-  // 4. Dispatch Channel 1: WhatsApp
-  let whatsappOutcome: ChannelDispatchOutcome;
+  // 4. Define WhatsApp worker task
+  const executeWhatsApp = async (): Promise<ChannelDispatchOutcome> => {
+    if (!shouldSendWhatsApp) {
+      return { attempted: false, skipped: true, skipReason: 'NOT_TARGETED', success: true, status: 'skipped' };
+    }
 
-  if (!shouldSendWhatsApp) {
-    whatsappOutcome = { attempted: false, skipped: true, skipReason: 'NOT_TARGETED', success: true, status: 'skipped' };
-  } else if (!patient.phone) {
-    whatsappOutcome = { attempted: true, skipped: false, success: false, status: 'failed', error: 'Patient has no registered phone number' };
-  } else if (existingWhatsApp && (existingWhatsApp.delivery_status === 'sent' || existingWhatsApp.delivery_status === 'delivered') && !force) {
-    console.log(`[Dispatcher] Duplicate prevention: WhatsApp message already sent for letter ${queryLetterId} (SID: ${existingWhatsApp.provider_message_id})`);
-    whatsappOutcome = {
-      attempted: false,
-      skipped: true,
-      skipReason: 'ALREADY_SENT',
-      success: true,
-      status: existingWhatsApp.delivery_status,
-      messageId: existingWhatsApp.id,
-      providerId: existingWhatsApp.provider_message_id,
-      recipient: patient.phone,
-    };
-  } else {
-    // Record or update message in 'queued' state
+    if (!patient.phone) {
+      return {
+        attempted: true,
+        skipped: false,
+        success: false,
+        status: 'failed',
+        error: 'Patient has no registered phone number',
+      };
+    }
+
+    if (existingWhatsApp && (existingWhatsApp.delivery_status === 'sent' || existingWhatsApp.delivery_status === 'delivered') && !force) {
+      console.log(`[Dispatcher] Duplicate prevention: WhatsApp already sent for letter ${queryLetterId} (SID: ${existingWhatsApp.provider_message_id})`);
+      return {
+        attempted: false,
+        skipped: true,
+        skipReason: 'ALREADY_SENT',
+        success: true,
+        status: existingWhatsApp.delivery_status,
+        messageId: existingWhatsApp.id,
+        providerId: existingWhatsApp.provider_message_id,
+        recipient: patient.phone,
+      };
+    }
+
+    // Upsert message record in 'queued' state
     let messageRecordId = existingWhatsApp?.id;
     if (messageRecordId) {
       await adminSupabase
@@ -192,7 +205,7 @@ export async function dispatchQueryNotification({
           },
         } as any);
 
-        whatsappOutcome = {
+        return {
           attempted: true,
           skipped: false,
           success: true,
@@ -223,7 +236,7 @@ export async function dispatchQueryNotification({
           },
         } as any);
 
-        whatsappOutcome = {
+        return {
           attempted: true,
           skipped: false,
           success: false,
@@ -234,39 +247,58 @@ export async function dispatchQueryNotification({
         };
       }
     } catch (err: any) {
-      whatsappOutcome = {
+      const errorMsg = err.message || 'WhatsApp network error';
+      await adminSupabase
+        .from('messages')
+        .update({
+          delivery_status: 'failed',
+          provider_message_id: `ERROR: ${errorMsg}`.substring(0, 255),
+        } as any)
+        .eq('id', messageRecordId);
+
+      return {
         attempted: true,
         skipped: false,
         success: false,
         status: 'failed',
         messageId: messageRecordId,
         recipient: patient.phone,
-        error: err.message,
+        error: errorMsg,
       };
     }
-  }
+  };
 
-  // 5. Dispatch Channel 2: Email (Independent - Failure in WhatsApp will not stop Email)
-  let emailOutcome: ChannelDispatchOutcome;
+  // 5. Define Email worker task
+  const executeEmail = async (): Promise<ChannelDispatchOutcome> => {
+    if (!shouldSendEmail) {
+      return { attempted: false, skipped: true, skipReason: 'NOT_TARGETED', success: true, status: 'skipped' };
+    }
 
-  if (!shouldSendEmail) {
-    emailOutcome = { attempted: false, skipped: true, skipReason: 'NOT_TARGETED', success: true, status: 'skipped' };
-  } else if (!patient.email) {
-    emailOutcome = { attempted: true, skipped: false, success: false, status: 'failed', error: 'Patient has no registered email' };
-  } else if (existingEmail && (existingEmail.delivery_status === 'sent' || existingEmail.delivery_status === 'delivered') && !force) {
-    console.log(`[Dispatcher] Duplicate prevention: Email message already sent for letter ${queryLetterId} (ID: ${existingEmail.provider_message_id})`);
-    emailOutcome = {
-      attempted: false,
-      skipped: true,
-      skipReason: 'ALREADY_SENT',
-      success: true,
-      status: existingEmail.delivery_status,
-      messageId: existingEmail.id,
-      providerId: existingEmail.provider_message_id,
-      recipient: patient.email,
-    };
-  } else {
-    // Record or update message in 'queued' state
+    if (!patient.email) {
+      return {
+        attempted: true,
+        skipped: false,
+        success: false,
+        status: 'failed',
+        error: 'Patient has no registered email address on file',
+      };
+    }
+
+    if (existingEmail && (existingEmail.delivery_status === 'sent' || existingEmail.delivery_status === 'delivered') && !force) {
+      console.log(`[Dispatcher] Duplicate prevention: Email already sent for letter ${queryLetterId} (ID: ${existingEmail.provider_message_id})`);
+      return {
+        attempted: false,
+        skipped: true,
+        skipReason: 'ALREADY_SENT',
+        success: true,
+        status: existingEmail.delivery_status,
+        messageId: existingEmail.id,
+        providerId: existingEmail.provider_message_id,
+        recipient: patient.email,
+      };
+    }
+
+    // Upsert message record in 'queued' state
     let messageRecordId = existingEmail?.id;
     if (messageRecordId) {
       await adminSupabase
@@ -321,7 +353,7 @@ export async function dispatchQueryNotification({
           },
         } as any);
 
-        emailOutcome = {
+        return {
           attempted: true,
           skipped: false,
           success: true,
@@ -352,7 +384,7 @@ export async function dispatchQueryNotification({
           },
         } as any);
 
-        emailOutcome = {
+        return {
           attempted: true,
           skipped: false,
           success: false,
@@ -363,17 +395,55 @@ export async function dispatchQueryNotification({
         };
       }
     } catch (err: any) {
-      emailOutcome = {
+      const errorMsg = err.message || 'Email delivery exception';
+      await adminSupabase
+        .from('messages')
+        .update({
+          delivery_status: 'failed',
+          provider_message_id: `ERROR: ${errorMsg}`.substring(0, 255),
+        } as any)
+        .eq('id', messageRecordId);
+
+      return {
         attempted: true,
         skipped: false,
         success: false,
         status: 'failed',
         messageId: messageRecordId,
         recipient: patient.email,
-        error: err.message,
+        error: errorMsg,
       };
     }
-  }
+  };
+
+  // 6. Execute WhatsApp and Email in PARALLEL via Promise.allSettled
+  // Complete channel independence: WhatsApp taking time or failing will NEVER delay or prevent Email
+  const [waSettled, emailSettled] = await Promise.allSettled([
+    executeWhatsApp(),
+    executeEmail(),
+  ]);
+
+  const whatsappOutcome: ChannelDispatchOutcome =
+    waSettled.status === 'fulfilled'
+      ? waSettled.value
+      : {
+          attempted: true,
+          skipped: false,
+          success: false,
+          status: 'failed',
+          error: waSettled.reason?.message || 'WhatsApp unexpected exception',
+        };
+
+  const emailOutcome: ChannelDispatchOutcome =
+    emailSettled.status === 'fulfilled'
+      ? emailSettled.value
+      : {
+          attempted: true,
+          skipped: false,
+          success: false,
+          status: 'failed',
+          error: emailSettled.reason?.message || 'Email unexpected exception',
+        };
 
   return {
     queryLetterId,
@@ -384,4 +454,3 @@ export async function dispatchQueryNotification({
     email: emailOutcome,
   };
 }
-

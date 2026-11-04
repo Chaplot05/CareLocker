@@ -27,7 +27,7 @@ export async function GET(
     // Fetch query letter with points and messages
     const { data: queryLetter, error } = (await supabase
       .from('query_letters')
-      .select('*, patients(id, patient_code, name), query_points(*), messages(*)')
+      .select('*, patients(id, patient_code, name, email, phone), query_points(*), messages(*)')
       .eq('id', id)
       .single()) as { data: any; error: any };
 

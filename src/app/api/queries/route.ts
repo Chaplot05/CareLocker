@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('query_letters')
-      .select('*, patients(id, patient_code, name), query_points(*), messages(*)')
+      .select('*, patients(id, patient_code, name, email, phone), query_points(*), messages(*)')
       .order('created_at', { ascending: false });
 
     if (patient_id) {

@@ -6,6 +6,7 @@ import {
   Sparkles,
   RefreshCw,
   Eye,
+  EyeOff,
   CheckCircle2,
   XCircle,
   HelpCircle,
@@ -26,9 +27,10 @@ import {
   Mail,
   Clock,
   AlertCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { QueryLetter, QueryPoint, Document, Message } from '@/types';
-import { formatDate, formatDateTime, getDecisionBadge } from '@/lib/utils';
+import { formatDate, formatDateTime, maskPhoneNumber, maskEmail, getDecisionBadge } from '@/lib/utils';
 import { Modal } from '@/components/common/Modal';
 
 interface QueryLetterDetailProps {
@@ -36,9 +38,12 @@ interface QueryLetterDetailProps {
     query_points?: (QueryPoint & {
       matched_documents?: Document[];
     })[];
+    messages?: Message[];
   };
   messages?: Message[];
   patientName: string;
+  patientEmail?: string;
+  patientPhone?: string;
   onRefresh: () => void;
   userRole?: string;
 }
@@ -47,26 +52,53 @@ export function QueryLetterDetail({
   queryLetter,
   messages = [],
   patientName,
+  patientEmail,
+  patientPhone,
   onRefresh,
   userRole = 'agent',
 }: QueryLetterDetailProps) {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [reprocessError, setReprocessError] = useState<string | null>(null);
 
+  // Consolidate and sort messages latest first
+  const allMessages = [
+    ...(queryLetter.messages || []),
+    ...(messages || []),
+  ].filter((m, idx, self) => self.findIndex((x) => x.id === m.id) === idx);
+
+  const sortedMessages = [...allMessages].sort((a, b) => {
+    const timeA = new Date(a.sent_at || a.created_at || 0).getTime();
+    const timeB = new Date(b.sent_at || b.created_at || 0).getTime();
+    return timeB - timeA;
+  });
+
+  const whatsAppMessage = sortedMessages.find(
+    (m) => m.query_letter_id === queryLetter.id && m.channel === 'WhatsApp'
+  );
+  const emailMessage = sortedMessages.find(
+    (m) => m.query_letter_id === queryLetter.id && m.channel === 'Email'
+  );
+
+  // Contact unmasking toggles
+  const [revealEmail, setRevealEmail] = useState(false);
+  const [revealPhone, setRevealPhone] = useState(false);
+
   // Message draft state
-  const whatsAppMessage = messages.find((m) => m.query_letter_id === queryLetter.id && m.channel === 'WhatsApp');
-  const emailMessage = messages.find((m) => m.query_letter_id === queryLetter.id && m.channel === 'Email');
-  const queryMessage = whatsAppMessage || emailMessage || messages.find((m) => m.query_letter_id === queryLetter.id);
+  const queryMessage = emailMessage || whatsAppMessage;
   const [draftContent, setDraftContent] = useState(queryMessage?.message_content || '');
   const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isRegeneratingDraft, setIsRegeneratingDraft] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
 
-  // Stage 3: Multi-channel delivery state
-  const [isSendingNotification, setIsSendingNotification] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
-  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
+  // Manual Notification Dispatch State
+  const [isDispatchingEmail, setIsDispatchingEmail] = useState(false);
+  const [isDispatchingWhatsApp, setIsDispatchingWhatsApp] = useState(false);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [dispatchSuccess, setDispatchSuccess] = useState<string | null>(null);
+
+  // Filter state for requirements
+  const [activeFilter, setActiveFilter] = useState<'all' | 'missing' | 'available' | 'needs_review'>('all');
 
   // Preview supporting doc modal
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
@@ -74,13 +106,17 @@ export function QueryLetterDetail({
   const [isLoadingSignedUrl, setIsLoadingSignedUrl] = useState(false);
 
   // Preview original query letter
-  const [letterSignedUrl, setLetterSignedUrl] = useState<string | null>(null);
   const [isPreviewingLetter, setIsPreviewingLetter] = useState(false);
 
   const points = queryLetter.query_points || [];
   const availableCount = points.filter((p) => p.decision_status === 'available').length;
   const missingCount = points.filter((p) => p.decision_status === 'missing').length;
   const reviewCount = points.filter((p) => p.decision_status === 'needs_review').length;
+
+  const filteredPoints = points.filter((p) => {
+    if (activeFilter === 'all') return true;
+    return p.decision_status === activeFilter;
+  });
 
   const handleReprocess = async () => {
     setIsReprocessing(true);
@@ -146,10 +182,12 @@ export function QueryLetterDetail({
     }
   };
 
-  const handleSendNotifications = async (channel?: 'WhatsApp' | 'Email') => {
-    setIsSendingNotification(true);
-    setSendError(null);
-    setSendSuccess(null);
+  const handleManualDispatch = async (channel: 'Email' | 'WhatsApp') => {
+    if (channel === 'Email') setIsDispatchingEmail(true);
+    if (channel === 'WhatsApp') setIsDispatchingWhatsApp(true);
+    setDispatchError(null);
+    setDispatchSuccess(null);
+
     try {
       const res = await fetch('/api/messages/send', {
         method: 'POST',
@@ -160,29 +198,29 @@ export function QueryLetterDetail({
           force: true,
         }),
       });
+
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to dispatch notifications');
+        throw new Error(data.error || `Failed to dispatch ${channel} notification.`);
       }
 
-      const waStatus = data.result?.whatsapp?.status;
-      const emStatus = data.result?.email?.status;
+      const outcome = channel === 'Email' ? data.result?.email : data.result?.whatsapp;
 
-      let msg = 'Dispatch finished. ';
-      if (channel === 'WhatsApp') {
-        msg = waStatus === 'sent' ? 'WhatsApp message dispatched successfully!' : `WhatsApp dispatch: ${waStatus}`;
-      } else if (channel === 'Email') {
-        msg = emStatus === 'sent' ? 'Email dispatched successfully!' : `Email dispatch: ${emStatus}`;
+      if (outcome?.status === 'sent') {
+        const idText = outcome.providerId ? ` (ID: ${outcome.providerId})` : '';
+        setDispatchSuccess(`${channel} sent successfully${idText}!`);
+      } else if (outcome?.status === 'failed') {
+        setDispatchError(outcome.error || `${channel} delivery failed.`);
       } else {
-        msg = `Dispatched: WhatsApp (${waStatus}), Email (${emStatus})`;
+        setDispatchSuccess(`Notification action processed: ${outcome?.status || 'dispatched'}`);
       }
 
-      setSendSuccess(msg);
       onRefresh();
     } catch (err: any) {
-      setSendError(err.message || 'Notification dispatch failed');
+      setDispatchError(err.message || `Failed to dispatch ${channel}`);
     } finally {
-      setIsSendingNotification(false);
+      if (channel === 'Email') setIsDispatchingEmail(false);
+      if (channel === 'WhatsApp') setIsDispatchingWhatsApp(false);
     }
   };
 
@@ -206,8 +244,6 @@ export function QueryLetterDetail({
   const handlePreviewOriginalLetter = async () => {
     setIsPreviewingLetter(true);
     try {
-      const res = await fetch(`/api/documents/${queryLetter.id}`); // Or query endpoint
-      // We can fetch via /api/queries/[id]
       const queryRes = await fetch(`/api/queries/${queryLetter.id}`);
       const data = await queryRes.json();
       if (data.queryLetter?.signedUrl) {
@@ -233,9 +269,9 @@ export function QueryLetterDetail({
       case 'extracting':
         return {
           label: 'Extracting Requirements...',
-          bg: 'bg-lavender-50',
-          text: 'text-lavender-800',
-          border: 'border-lavender-200',
+          bg: 'bg-[#F2EEFA]',
+          text: 'text-[#7956B5]',
+          border: 'border-[#E7E3EF]',
           icon: Sparkles,
         };
       case 'matching':
@@ -270,192 +306,546 @@ export function QueryLetterDetail({
   const StatusIcon = statusBadge.icon;
 
   return (
-    <div className="space-y-6 rounded-2xl border border-[#E7E3EF] bg-white p-6 shadow-xs">
-      {/* Query Letter Header Bar */}
+    <div className="space-y-6 rounded-2xl border border-[#E7E3EF] bg-white p-6 shadow-2xs">
+      {/* 1. Query Letter Header Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E7E3EF] pb-5">
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="rounded-xl bg-[#F2EEFA] p-2 text-[#7956B5] border border-[#E7E3EF]">
               <FileText className="h-5 w-5" />
             </div>
-            <h3 className="text-base font-bold text-[#111111]">{queryLetter.file_name}</h3>
+            <h3 className="text-base font-black text-[#111111]">{queryLetter.file_name}</h3>
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider border ${statusBadge.bg} ${statusBadge.text} ${statusBadge.border}`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider border ${statusBadge.bg} ${statusBadge.text} ${statusBadge.border}`}
             >
               <StatusIcon className={`h-3 w-3 ${queryLetter.status === 'extracting' || queryLetter.status === 'matching' ? 'animate-spin' : ''}`} />
               <span>{statusBadge.label}</span>
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-1">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-[#6B7280] pt-1">
             {queryLetter.insurer_name && (
               <span>
-                Insurer: <strong className="text-slate-800">{queryLetter.insurer_name}</strong>
+                Insurer: <strong className="text-[#111111]">{queryLetter.insurer_name}</strong>
               </span>
             )}
             {queryLetter.claim_number && (
               <span>
-                Claim Ref: <strong className="font-mono text-slate-800">{queryLetter.claim_number}</strong>
+                Claim Ref: <strong className="font-mono text-[#111111]">{queryLetter.claim_number}</strong>
               </span>
             )}
-            <span>Uploaded: {formatDate(queryLetter.created_at)}</span>
+            <span>
+              Uploaded: <strong className="text-[#111111]">{formatDate(queryLetter.created_at)}</strong>
+            </span>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        {/* Header Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handlePreviewOriginalLetter}
+            disabled={isPreviewingLetter}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3.5 py-2 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA] shadow-2xs transition-colors disabled:opacity-50"
+          >
+            <Eye className="h-3.5 w-3.5 text-[#7956B5]" />
+            <span>{isPreviewingLetter ? 'Loading...' : 'View Original Letter'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleReprocess}
             disabled={isReprocessing || queryLetter.status === 'extracting' || queryLetter.status === 'matching'}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-4 py-2 text-xs font-bold text-white hover:bg-[#171417] shadow-2xs transition-all disabled:opacity-50 active:scale-[0.98]"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isReprocessing ? 'animate-spin text-peach-500' : 'text-slate-500'}`} />
-            <span>{isReprocessing ? 'Reprocessing AI...' : 'Retry / Re-evaluate'}</span>
+            <RefreshCw className={`h-3.5 w-3.5 text-[#B7A2DE] ${isReprocessing ? 'animate-spin' : ''}`} />
+            <span>{isReprocessing ? 'Reprocessing AI...' : 'Reprocess Letter'}</span>
           </button>
         </div>
       </div>
 
       {reprocessError && (
-        <div className="flex items-center gap-2 rounded-xl border border-peach-200 bg-peach-50 p-3 text-xs text-peach-800">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-peach-600" />
+        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
           <span>{reprocessError}</span>
         </div>
       )}
 
-      {queryLetter.error_message && (
-        <div className="rounded-xl border border-peach-200 bg-peach-50/70 p-3.5 text-xs text-peach-900 space-y-1">
-          <span className="font-bold block">Processing Failure Notice:</span>
-          <p>{queryLetter.error_message}</p>
-        </div>
-      )}
+      {/* 2. PROMINENT NOTIFICATION DELIVERY & OUTREACH SECTION */}
+      <div className="rounded-2xl border border-[#E7E3EF] bg-[#F8F7FB] p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7E3EF] pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-xl bg-[#111111] p-2 text-white">
+              <Send className="h-4 w-4 text-[#B7A2DE]" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-[#111111]">
+                Notification Delivery & Patient Outreach
+              </h4>
+              <p className="text-xs text-[#6B7280]">
+                Automatic multi-channel dispatch status triggered upon query matching
+              </p>
+            </div>
+          </div>
 
-      {/* Summary Scoreboard */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-center">
-          <span className="text-[11px] text-slate-400 uppercase font-semibold">Total Requirements</span>
-          <span className="block text-xl font-bold text-slate-900 mt-0.5">{points.length}</span>
+          <div className="flex items-center gap-2">
+            {missingCount === 0 ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-800">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Zero Missing Items (No Outreach Needed)</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-200 px-3 py-1 text-xs font-bold text-red-800">
+                <AlertCircle className="h-3.5 w-3.5 text-red-600" />
+                <span>{missingCount} Missing Item{missingCount > 1 ? 's' : ''} Requiring Patient Action</span>
+              </span>
+            )}
+          </div>
         </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-center">
-          <span className="text-[11px] text-emerald-700 uppercase font-semibold">Available in Vault</span>
-          <span className="block text-xl font-bold text-emerald-800 mt-0.5">{availableCount}</span>
-        </div>
-        <div className="rounded-xl border border-peach-200 bg-peach-50/60 p-3 text-center">
-          <span className="text-[11px] text-peach-700 uppercase font-semibold">Missing Documents</span>
-          <span className="block text-xl font-bold text-peach-800 mt-0.5">{missingCount}</span>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-center">
-          <span className="text-[11px] text-amber-700 uppercase font-semibold">Needs Staff Review</span>
-          <span className="block text-xl font-bold text-amber-800 mt-0.5">{reviewCount}</span>
+
+        {/* Global Feedback Banners */}
+        {dispatchSuccess && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{dispatchSuccess}</span>
+          </div>
+        )}
+        {dispatchError && (
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-800">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+            <span>{dispatchError}</span>
+          </div>
+        )}
+
+        {/* Zero Missing Items Reassurance */}
+        {missingCount === 0 && (
+          <div className="rounded-xl border border-emerald-200 bg-white p-4 text-xs space-y-1">
+            <div className="flex items-center gap-2 font-bold text-emerald-900">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>All Requested Requirements Are Available in Vault</span>
+            </div>
+            <p className="text-[#6B7280] pl-6 leading-relaxed">
+              Care.locker verified all insurer requirements against existing medical records.
+              No notification email or WhatsApp was dispatched to the patient because no documents are missing.
+            </p>
+          </div>
+        )}
+
+        {/* Delivery Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Channel 1: Gmail SMTP Email Card */}
+          <div className="rounded-xl border border-[#E7E3EF] bg-white p-4.5 space-y-3.5 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-[#E7E3EF] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-[#F2EEFA] p-2 text-[#7956B5] border border-[#E7E3EF]">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-black text-[#111111]">Gmail SMTP Email</h5>
+                  <span className="text-[11px] text-[#6B7280]">Direct patient email delivery</span>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              {emailMessage ? (
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold border ${
+                    emailMessage.delivery_status === 'sent' || emailMessage.delivery_status === 'delivered'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : emailMessage.delivery_status === 'failed'
+                      ? 'bg-red-50 text-red-800 border-red-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {emailMessage.delivery_status === 'sent' || emailMessage.delivery_status === 'delivered' ? (
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  ) : emailMessage.delivery_status === 'failed' ? (
+                    <XCircle className="h-3 w-3 text-red-600" />
+                  ) : (
+                    <Clock className="h-3 w-3 text-amber-600" />
+                  )}
+                  <span className="capitalize">{emailMessage.delivery_status === 'sent' ? 'Sent via SMTP' : emailMessage.delivery_status}</span>
+                </span>
+              ) : (
+                <span className="rounded-full bg-[#F8F7FB] px-2.5 py-0.5 text-[11px] font-bold text-[#6B7280] border border-[#E7E3EF]">
+                  Not Dispatched
+                </span>
+              )}
+            </div>
+
+            {/* Recipient Info */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B7280] font-medium">Patient Recipient:</span>
+                {patientEmail ? (
+                  <div className="flex items-center gap-1.5 font-bold text-[#111111]">
+                    <span>{revealEmail ? patientEmail : maskEmail(patientEmail)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setRevealEmail(!revealEmail)}
+                      className="text-[#7956B5] hover:text-[#111111]"
+                      title={revealEmail ? 'Mask email' : 'Reveal email'}
+                    >
+                      {revealEmail ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-red-600 font-bold">No Email On File</span>
+                )}
+              </div>
+
+              {emailMessage?.sent_at && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B7280] font-medium">Last Sent:</span>
+                  <span className="font-bold text-[#111111]">
+                    {formatDateTime(emailMessage.sent_at)}
+                  </span>
+                </div>
+              )}
+
+              {emailMessage?.provider_message_id && !emailMessage.provider_message_id.startsWith('ERROR:') && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B7280] font-medium">Provider ID:</span>
+                  <span className="font-mono text-[11px] text-[#7956B5] font-bold truncate max-w-[200px]" title={emailMessage.provider_message_id}>
+                    {emailMessage.provider_message_id}
+                  </span>
+                </div>
+              )}
+
+              {/* Error Notice */}
+              {emailMessage?.delivery_status === 'failed' && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-[11px] text-red-800 space-y-1">
+                  <div className="font-bold flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                    <span>Provider Delivery Error:</span>
+                  </div>
+                  <p className="pl-4.5 font-mono text-[10px] break-all">
+                    {emailMessage.provider_message_id?.replace(/^ERROR:\s*/, '') || 'SMTP transaction rejected'}
+                  </p>
+                </div>
+              )}
+
+              {!patientEmail && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800">
+                  Patient email is missing. Add an email to the patient profile to enable automated delivery.
+                </div>
+              )}
+            </div>
+
+            {/* Email Actions */}
+            <div className="border-t border-[#E7E3EF] pt-3 flex items-center justify-between">
+              <span className="text-[11px] text-[#6B7280]">
+                {emailMessage?.delivery_status === 'sent' ? 'Delivered to inbox' : 'Manual send fallback'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => handleManualDispatch('Email')}
+                disabled={isDispatchingEmail || !patientEmail}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#171417] shadow-2xs transition-all disabled:opacity-50 active:scale-[0.98]"
+              >
+                {isDispatchingEmail ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[#B7A2DE]" />
+                    <span>Sending Email...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-3.5 w-3.5 text-[#B7A2DE]" />
+                    <span>{emailMessage?.delivery_status === 'sent' ? 'Resend Email' : emailMessage ? 'Retry Email' : 'Send Email'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Channel 2: Twilio WhatsApp Card */}
+          <div className="rounded-xl border border-[#E7E3EF] bg-white p-4.5 space-y-3.5 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-[#E7E3EF] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-xl bg-emerald-50 p-2 text-emerald-700 border border-emerald-200">
+                  <Phone className="h-4 w-4" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-black text-[#111111]">Twilio WhatsApp</h5>
+                  <span className="text-[11px] text-[#6B7280]">Sandbox mobile notification</span>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              {whatsAppMessage ? (
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold border ${
+                    whatsAppMessage.delivery_status === 'sent' || whatsAppMessage.delivery_status === 'delivered'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : whatsAppMessage.delivery_status === 'failed'
+                      ? 'bg-red-50 text-red-800 border-red-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {whatsAppMessage.delivery_status === 'sent' || whatsAppMessage.delivery_status === 'delivered' ? (
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  ) : whatsAppMessage.delivery_status === 'failed' ? (
+                    <XCircle className="h-3 w-3 text-red-600" />
+                  ) : (
+                    <Clock className="h-3 w-3 text-amber-600" />
+                  )}
+                  <span className="capitalize">{whatsAppMessage.delivery_status}</span>
+                </span>
+              ) : (
+                <span className="rounded-full bg-[#F8F7FB] px-2.5 py-0.5 text-[11px] font-bold text-[#6B7280] border border-[#E7E3EF]">
+                  Not Dispatched
+                </span>
+              )}
+            </div>
+
+            {/* Recipient Info */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[#6B7280] font-medium">Phone Recipient:</span>
+                {patientPhone ? (
+                  <div className="flex items-center gap-1.5 font-bold text-[#111111] font-mono">
+                    <span>{revealPhone ? patientPhone : maskPhoneNumber(patientPhone)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setRevealPhone(!revealPhone)}
+                      className="text-[#7956B5] hover:text-[#111111]"
+                      title={revealPhone ? 'Mask phone' : 'Reveal phone'}
+                    >
+                      {revealPhone ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-red-600 font-bold">No Phone On File</span>
+                )}
+              </div>
+
+              {whatsAppMessage?.sent_at && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B7280] font-medium">Last Sent:</span>
+                  <span className="font-bold text-[#111111]">
+                    {formatDateTime(whatsAppMessage.sent_at)}
+                  </span>
+                </div>
+              )}
+
+              {whatsAppMessage?.provider_message_id && !whatsAppMessage.provider_message_id.startsWith('ERROR:') && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6B7280] font-medium">Twilio SID:</span>
+                  <span className="font-mono text-[11px] text-emerald-700 font-bold truncate max-w-[200px]" title={whatsAppMessage.provider_message_id}>
+                    {whatsAppMessage.provider_message_id}
+                  </span>
+                </div>
+              )}
+
+              {whatsAppMessage?.delivery_status === 'failed' && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-[11px] text-red-800 space-y-1">
+                  <div className="font-bold flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                    <span>WhatsApp Error:</span>
+                  </div>
+                  <p className="pl-4.5 font-mono text-[10px] break-all">
+                    {whatsAppMessage.provider_message_id?.replace(/^ERROR:\s*/, '') || 'Twilio rejected recipient'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* WhatsApp Actions */}
+            <div className="border-t border-[#E7E3EF] pt-3 flex items-center justify-between">
+              <span className="text-[11px] text-[#6B7280]">Independent mobile channel</span>
+
+              <button
+                type="button"
+                onClick={() => handleManualDispatch('WhatsApp')}
+                disabled={isDispatchingWhatsApp || !patientPhone}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3.5 py-1.5 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA] shadow-2xs transition-all disabled:opacity-50"
+              >
+                {isDispatchingWhatsApp ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7956B5]" />
+                    <span>Sending WhatsApp...</span>
+                  </>
+                ) : (
+                  <>
+                    <Phone className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{whatsAppMessage?.delivery_status === 'sent' ? 'Resend WhatsApp' : whatsAppMessage ? 'Retry WhatsApp' : 'Send WhatsApp'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Extracted Query Requirements & Document Matching Results (Feature 3 & 4) */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-          Extracted Query Requirements & Evidence Matching
-        </h4>
+      {/* 3. Query Points Scoreboard & Filter Tabs */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="rounded-xl border border-[#E7E3EF] bg-white p-3.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280]">
+              Total Requirements
+            </span>
+            <p className="mt-1 text-2xl font-black text-[#111111]">{points.length}</p>
+          </div>
 
-        {points.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400">
-            {queryLetter.status === 'extracting' || queryLetter.status === 'matching' ? (
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="h-6 w-6 animate-spin text-lavender-700" />
-                <span>Gemini AI is extracting requirements and matching against patient vault...</span>
-              </div>
-            ) : (
-              <span>No query requirements extracted. Click &quot;Retry / Re-evaluate&quot; to parse again.</span>
-            )}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+              Verified Available
+            </span>
+            <p className="mt-1 text-2xl font-black text-emerald-700">{availableCount}</p>
+          </div>
+
+          <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-red-800">
+              Missing Documents
+            </span>
+            <p className="mt-1 text-2xl font-black text-red-700">{missingCount}</p>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+              Needs Review
+            </span>
+            <p className="mt-1 text-2xl font-black text-amber-700">{reviewCount}</p>
+          </div>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#E7E3EF] pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+              activeFilter === 'all'
+                ? 'bg-[#111111] text-white shadow-2xs'
+                : 'bg-white text-[#6B7280] border border-[#E7E3EF] hover:bg-[#F2EEFA]'
+            }`}
+          >
+            All Points ({points.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('missing')}
+            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+              activeFilter === 'missing'
+                ? 'bg-red-600 text-white shadow-2xs'
+                : 'bg-white text-red-700 border border-red-200 hover:bg-red-50'
+            }`}
+          >
+            Missing Only ({missingCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('available')}
+            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+              activeFilter === 'available'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50'
+            }`}
+          >
+            Available ({availableCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('needs_review')}
+            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+              activeFilter === 'needs_review'
+                ? 'bg-amber-600 text-white shadow-2xs'
+                : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-50'
+            }`}
+          >
+            Needs Review ({reviewCount})
+          </button>
+        </div>
+
+        {/* Requirements List */}
+        {filteredPoints.length === 0 ? (
+          <div className="rounded-xl border border-[#E7E3EF] bg-[#F8F7FB] p-8 text-center text-xs text-[#6B7280]">
+            No requirements match the selected filter.
           </div>
         ) : (
           <div className="space-y-3">
-            {points.map((pt, idx) => {
+            {filteredPoints.map((pt, idx) => {
               const badge = getDecisionBadge(pt.decision_status);
-              const matchedDocs = pt.matched_documents || [];
-
               return (
                 <div
-                  key={pt.id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3 hover:border-lavender-300 transition-colors"
+                  key={pt.id || idx}
+                  className="rounded-xl border border-[#E7E3EF] bg-white p-4 space-y-3 hover:border-[#7956B5] transition-colors shadow-2xs"
                 >
-                  {/* Point Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                    <div className="space-y-1 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-600">
+                        <span className="font-mono text-xs font-bold text-[#7956B5]">
                           #{idx + 1}
                         </span>
-                        <span className="font-semibold text-xs text-slate-700 bg-lavender-50 text-lavender-800 px-2 py-0.5 rounded border border-lavender-200">
+                        <span className="rounded-md bg-[#F2EEFA] border border-[#E7E3EF] px-2 py-0.5 text-[10px] font-bold text-[#7956B5]">
                           {pt.document_category}
                         </span>
+                        {pt.confidence !== null && pt.confidence !== undefined && (
+                          <span className="text-[10px] font-mono text-[#6B7280]">
+                            Confidence: {Math.round(pt.confidence * 100)}%
+                          </span>
+                        )}
                       </div>
-                      <p className="font-medium text-slate-900 text-xs leading-relaxed pt-1">
-                        &quot;{pt.requirement_text}&quot;
+                      <p className="text-xs font-bold text-[#111111] leading-relaxed pt-1">
+                        &ldquo;{pt.requirement_text}&rdquo;
                       </p>
                     </div>
 
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span
-                        className={`rounded-md border px-2.5 py-1 text-xs font-bold ${badge.bg} ${badge.text} ${badge.border}`}
-                      >
-                        {badge.label}
-                      </span>
-                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border uppercase tracking-wider shrink-0 ${badge.bg} ${badge.text} ${badge.border}`}
+                    >
+                      {pt.decision_status === 'available' ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : pt.decision_status === 'missing' ? (
+                        <XCircle className="h-3.5 w-3.5 text-red-600" />
+                      ) : (
+                        <HelpCircle className="h-3.5 w-3.5 text-amber-600" />
+                      )}
+                      <span>{badge.label}</span>
+                    </span>
                   </div>
 
-                  {/* Supporting Documents (Support Multiple Documents) */}
-                  {matchedDocs.length > 0 && (
-                    <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-100 text-[11px] space-y-1.5">
-                      <span className="font-semibold text-slate-600 flex items-center gap-1">
-                        <FolderLock className="h-3 w-3 text-lavender-700" />
-                        <span>Supporting Document(s) in Vault ({matchedDocs.length}):</span>
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {matchedDocs.map((doc) => (
-                          <button
-                            key={doc.id}
-                            type="button"
-                            onClick={() => handlePreviewSupportingDoc(doc)}
-                            className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-200 px-2 py-1 text-slate-800 hover:border-lavender-400 hover:text-lavender-800 shadow-2xs transition-colors"
-                          >
-                            <FileCheck className="h-3 w-3 text-emerald-600" />
-                            <span className="truncate max-w-[200px]">{doc.document_name}</span>
-                            <Eye className="h-2.5 w-2.5 text-slate-400" />
-                          </button>
-                        ))}
+                  {/* AI Evidence Quote & Reasoning */}
+                  {pt.reasoning && (
+                    <div className="rounded-lg bg-[#F8F7FB] p-3 text-xs border border-[#E7E3EF] space-y-1.5">
+                      <div className="font-bold text-[#111111] flex items-center gap-1.5 text-[11px]">
+                        <Sparkles className="h-3.5 w-3.5 text-[#7956B5]" />
+                        <span>Clinical AI Matching Evidence</span>
                       </div>
+                      <p className="text-[#6B7280] leading-relaxed pl-5">
+                        {pt.reasoning}
+                      </p>
+                      {pt.evidence_quote && (
+                        <blockquote className="border-l-2 border-[#7956B5] pl-3 italic text-[11px] text-[#111111] my-1 ml-5">
+                          &ldquo;{pt.evidence_quote}&rdquo;
+                        </blockquote>
+                      )}
                     </div>
                   )}
 
-                  {/* Evidence Quote & Medical Reasoning */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] pt-1 border-t border-slate-100">
-                    <div>
-                      <span className="font-semibold text-slate-400 block uppercase text-[10px]">
-                        Forensic Evidence Quote:
+                  {/* Matched Supporting Documents */}
+                  {pt.matched_documents && pt.matched_documents.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="text-[11px] font-bold text-[#6B7280]">
+                        Supporting Vault Documents:
                       </span>
-                      {pt.evidence_quote ? (
-                        <blockquote className="mt-0.5 italic text-slate-700 bg-slate-50 p-2 rounded border-l-2 border-emerald-400">
-                          &quot;{pt.evidence_quote}&quot;
-                        </blockquote>
-                      ) : (
-                        <span className="text-slate-400 italic">No direct quote (Document missing from vault)</span>
-                      )}
+                      {pt.matched_documents.map((doc) => (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => handlePreviewSupportingDoc(doc)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#E7E3EF] bg-white px-2.5 py-1 text-[11px] font-bold text-[#111111] hover:bg-[#F2EEFA] transition-colors"
+                        >
+                          <FileCheck className="h-3 w-3 text-[#7956B5]" />
+                          <span>{doc.document_name}</span>
+                        </button>
+                      ))}
                     </div>
-
-                    <div>
-                      <span className="font-semibold text-slate-400 block uppercase text-[10px]">
-                        Adjudication Reasoning:
-                      </span>
-                      <p className="mt-0.5 text-slate-700 leading-relaxed">
-                        {pt.reasoning || 'Reasoning details not recorded.'}
-                      </p>
-                      {pt.confidence && (
-                        <span className="text-[10px] text-slate-400 mt-1 block">
-                          Confidence score: {Math.round(pt.confidence * 100)}%
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -463,19 +853,19 @@ export function QueryLetterDetail({
         )}
       </div>
 
-      {/* Feature 5: Patient Notification Draft Card */}
-      <div className="rounded-2xl border border-[#E7E3EF] bg-[#F2EEFA]/40 p-5 space-y-4">
+      {/* 4. PATIENT-FRIENDLY NOTIFICATION DRAFT PREVIEW & EDITOR */}
+      <div className="rounded-2xl border border-[#E7E3EF] bg-white p-5 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7E3EF] pb-3">
           <div className="flex items-center gap-2">
-            <div className="rounded-xl bg-[#7956B5] p-2 text-white shadow-2xs">
+            <div className="rounded-xl bg-[#F2EEFA] p-2 text-[#7956B5] border border-[#E7E3EF]">
               <MessageSquare className="h-4 w-4" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-[#111111]">
-                Patient Notification Message Draft
+              <h4 className="text-xs font-black text-[#111111]">
+                Patient-Friendly Notification Draft
               </h4>
               <p className="text-[11px] text-[#6B7280]">
-                Automated plain-language request requesting <strong className="text-[#7956B5]">ONLY genuinely missing items</strong>.
+                Pre-composed message sent automatically across WhatsApp and Gmail SMTP
               </p>
             </div>
           </div>
@@ -486,17 +876,8 @@ export function QueryLetterDetail({
               onClick={handleCopyMessage}
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3 py-1.5 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA] shadow-2xs transition-colors"
             >
-              {hasCopied ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  <span className="text-emerald-700">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5 text-[#7956B5]" />
-                  <span>Copy Message</span>
-                </>
-              )}
+              {hasCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-[#7956B5]" />}
+              <span>{hasCopied ? 'Copied' : 'Copy'}</span>
             </button>
 
             <button
@@ -505,7 +886,7 @@ export function QueryLetterDetail({
               disabled={isRegeneratingDraft}
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#E7E3EF] bg-white px-3 py-1.5 text-xs font-bold text-[#111111] hover:bg-[#F2EEFA] shadow-2xs transition-colors disabled:opacity-50"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRegeneratingDraft ? 'animate-spin text-[#7956B5]' : 'text-[#7956B5]'}`} />
+              <RefreshCw className={`h-3.5 w-3.5 text-[#7956B5] ${isRegeneratingDraft ? 'animate-spin' : ''}`} />
               <span>{isRegeneratingDraft ? 'Regenerating...' : 'Regenerate'}</span>
             </button>
 
@@ -520,7 +901,6 @@ export function QueryLetterDetail({
           </div>
         </div>
 
-        {/* Draft Content Display / Editor */}
         {isEditingDraft ? (
           <div className="space-y-3">
             <textarea
@@ -544,266 +924,61 @@ export function QueryLetterDetail({
                 className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#171417] disabled:opacity-50 shadow-2xs"
               >
                 <Save className="h-3.5 w-3.5" />
-                <span>{isSavingDraft ? 'Saving...' : 'Save Draft Changes'}</span>
+                <span>{isSavingDraft ? 'Saving...' : 'Save Changes'}</span>
               </button>
             </div>
           </div>
         ) : (
-          <div className="rounded-xl bg-white p-4 border border-[#E7E3EF] text-xs text-[#111111] font-sans whitespace-pre-wrap leading-relaxed shadow-2xs">
+          <div className="rounded-xl bg-[#F8F7FB] p-4 border border-[#E7E3EF] text-xs text-[#111111] font-sans whitespace-pre-wrap leading-relaxed shadow-2xs">
             {draftContent || queryMessage?.message_content || 'No draft message generated yet.'}
           </div>
         )}
-
-        {/* Feedback alerts */}
-        {sendError && (
-          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-            <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
-            <span>{sendError}</span>
-          </div>
-        )}
-        {sendSuccess && (
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-            <span>{sendSuccess}</span>
-          </div>
-        )}
-
-        {/* Multi-Channel Delivery Tracking Cards */}
-        <div className="pt-2 border-t border-[#E7E3EF] space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="font-bold text-[#111111] text-xs flex items-center gap-1.5">
-                <Send className="h-3.5 w-3.5 text-[#7956B5]" />
-                <span>Automated Multi-Channel Notification Dispatch</span>
-              </span>
-              <p className="text-[11px] text-[#6B7280]">
-                Independent real-time delivery tracking for WhatsApp and Gmail SMTP
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleSendNotifications()}
-              disabled={isSendingNotification}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#111111] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#171417] shadow-2xs transition-colors disabled:opacity-50"
-            >
-              {isSendingNotification ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Dispatching...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="h-3.5 w-3.5 text-[#B7A2DE]" />
-                  <span>{whatsAppMessage || emailMessage ? 'Resend Notifications' : 'Dispatch Notifications'}</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            {/* WhatsApp Channel Card */}
-            <div className="rounded-xl border border-emerald-200 bg-white p-3.5 space-y-2.5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-emerald-100 p-1.5 text-emerald-800">
-                    <Phone className="h-3.5 w-3.5" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-900 text-xs block">Twilio WhatsApp</span>
-                    <span className="text-[10px] text-slate-400">Sandbox messaging</span>
-                  </div>
-                </div>
-
-                {whatsAppMessage ? (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
-                      whatsAppMessage.delivery_status === 'sent' || whatsAppMessage.delivery_status === 'delivered'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : whatsAppMessage.delivery_status === 'failed'
-                        ? 'bg-red-50 text-red-800 border-red-200'
-                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                    }`}
-                  >
-                    {whatsAppMessage.delivery_status === 'sent' || whatsAppMessage.delivery_status === 'delivered' ? (
-                      <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                    ) : whatsAppMessage.delivery_status === 'failed' ? (
-                      <XCircle className="h-3 w-3 text-red-600" />
-                    ) : (
-                      <Clock className="h-3 w-3 text-amber-600" />
-                    )}
-                    <span className="capitalize">{whatsAppMessage.delivery_status}</span>
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-slate-200">
-                    Not Dispatched
-                  </span>
-                )}
-              </div>
-
-              {whatsAppMessage && (
-                <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Provider SID:</span>
-                    <span className="font-mono text-slate-800 truncate max-w-[180px]">
-                      {whatsAppMessage.provider_message_id || '—'}
-                    </span>
-                  </div>
-                  {whatsAppMessage.sent_at && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Sent At:</span>
-                      <span className="font-medium text-slate-800">
-                        {formatDateTime(whatsAppMessage.sent_at)}
-                      </span>
-                    </div>
-                  )}
-                  {whatsAppMessage.delivery_status === 'failed' && whatsAppMessage.provider_message_id && (
-                    <div className="p-2 mt-1 rounded-lg bg-red-50 border border-red-100 text-[10px] text-red-700">
-                      {whatsAppMessage.provider_message_id}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleSendNotifications('WhatsApp')}
-                  disabled={isSendingNotification}
-                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition-colors"
-                >
-                  <RefreshCw className={`h-3 w-3 ${isSendingNotification ? 'animate-spin' : ''}`} />
-                  <span>{whatsAppMessage ? 'Retry WhatsApp' : 'Send WhatsApp'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Email Channel Card */}
-            <div className="rounded-xl border border-blue-200 bg-white p-3.5 space-y-2.5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg bg-blue-100 p-1.5 text-blue-800">
-                    <Mail className="h-3.5 w-3.5" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-900 text-xs block">Gmail SMTP Email</span>
-                    <span className="text-[10px] text-slate-400">Nodemailer delivery</span>
-                  </div>
-                </div>
-
-                {emailMessage ? (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
-                      emailMessage.delivery_status === 'sent' || emailMessage.delivery_status === 'delivered'
-                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                        : emailMessage.delivery_status === 'failed'
-                        ? 'bg-red-50 text-red-800 border-red-200'
-                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                    }`}
-                  >
-                    {emailMessage.delivery_status === 'sent' || emailMessage.delivery_status === 'delivered' ? (
-                      <CheckCircle2 className="h-3 w-3 text-blue-600" />
-                    ) : emailMessage.delivery_status === 'failed' ? (
-                      <XCircle className="h-3 w-3 text-red-600" />
-                    ) : (
-                      <Clock className="h-3 w-3 text-amber-600" />
-                    )}
-                    <span className="capitalize">{emailMessage.delivery_status}</span>
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 border border-slate-200">
-                    Not Dispatched
-                  </span>
-                )}
-              </div>
-
-              {emailMessage && (
-                <div className="space-y-1 text-[11px] text-slate-600 border-t border-slate-100 pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Message ID:</span>
-                    <span className="font-mono text-slate-800 truncate max-w-[180px]">
-                      {emailMessage.provider_message_id || '—'}
-                    </span>
-                  </div>
-                  {emailMessage.sent_at && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Sent At:</span>
-                      <span className="font-medium text-slate-800">
-                        {formatDateTime(emailMessage.sent_at)}
-                      </span>
-                    </div>
-                  )}
-                  {emailMessage.delivery_status === 'failed' && emailMessage.provider_message_id && (
-                    <div className="p-2 mt-1 rounded-lg bg-red-50 border border-red-100 text-[10px] text-red-700">
-                      {emailMessage.provider_message_id}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleSendNotifications('Email')}
-                  disabled={isSendingNotification}
-                  className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-                >
-                  <RefreshCw className={`h-3 w-3 ${isSendingNotification ? 'animate-spin' : ''}`} />
-                  <span>{emailMessage ? 'Retry Email' : 'Send Email'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Supporting Document Preview Modal */}
-      <Modal
-        isOpen={!!previewDoc}
-        onClose={() => setPreviewDoc(null)}
-        title={previewDoc?.document_name || 'Supporting Document Preview'}
-        description={`Category: ${previewDoc?.category}`}
-        maxWidth="4xl"
-      >
-        <div className="space-y-4">
-          {isLoadingSignedUrl ? (
-            <div className="flex h-64 items-center justify-center">
-              <RefreshCw className="h-6 w-6 animate-spin text-[#7956B5]" />
-            </div>
-          ) : previewSignedUrl ? (
-            <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900/5">
-              {previewDoc?.file_type?.includes('pdf') || previewDoc?.document_name.endsWith('.pdf') ? (
-                <iframe
-                  src={previewSignedUrl}
-                  title="Supporting Document"
-                  className="w-full h-[65vh] rounded-lg bg-white"
-                />
-              ) : (
-                <div className="flex justify-center p-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={previewSignedUrl}
-                    alt={previewDoc?.document_name}
-                    className="max-h-[65vh] object-contain rounded-md"
-                  />
+      {previewDoc && (
+        <Modal
+          isOpen={!!previewDoc}
+          onClose={() => setPreviewDoc(null)}
+          title={`Supporting Evidence: ${previewDoc.document_name}`}
+          description={`Category: ${previewDoc.category}`}
+          maxWidth="2xl"
+        >
+          <div className="space-y-4 text-xs">
+            {isLoadingSignedUrl ? (
+              <div className="flex h-48 flex-col items-center justify-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-[#7956B5]" />
+                <p className="text-xs text-[#6B7280]">Generating temporary signed preview link...</p>
+              </div>
+            ) : previewSignedUrl ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-xl bg-[#F8F7FB] p-3 border border-[#E7E3EF]">
+                  <span className="font-bold text-[#111111]">{previewDoc.document_name}</span>
+                  <a
+                    href={previewSignedUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-bold text-[#7956B5] hover:underline"
+                  >
+                    <span>Open in new tab</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">Could not generate signed preview URL.</p>
-          )}
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="button"
-              onClick={() => setPreviewDoc(null)}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Close Preview
-            </button>
+                {previewDoc.ai_summary && (
+                  <div className="rounded-xl bg-[#F2EEFA]/50 border border-[#E7E3EF] p-4 space-y-2">
+                    <span className="font-bold text-[#7956B5] block">AI Clinical Summary:</span>
+                    <p className="text-[#111111] leading-relaxed">
+                      {(previewDoc.ai_summary as any)?.summary || 'Summary generated by Gemini multimodal pipeline.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-red-600">Failed to load preview for this document.</p>
+            )}
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 }

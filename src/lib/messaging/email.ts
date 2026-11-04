@@ -51,11 +51,12 @@ export function isValidEmail(email: string): boolean {
 
 /**
  * Builds a clean HTML template for patient insurance notification
+ * Styled using Care.fi / Care.locker flat design palette (black, #7956B5 purple, #F2EEFA lavender)
  */
 export function buildClaimNotificationHtml(patientName: string, textBody: string): string {
   const formattedBody = textBody
     .split('\n\n')
-    .map((p) => `<p style="margin: 0 0 14px 0; line-height: 1.6; color: #334155;">${p.replace(/\n/g, '<br/>')}</p>`)
+    .map((p) => `<p style="margin: 0 0 14px 0; line-height: 1.6; color: #111111;">${p.replace(/\n/g, '<br/>')}</p>`)
     .join('');
 
   return `
@@ -63,36 +64,37 @@ export function buildClaimNotificationHtml(patientName: string, textBody: string
 <html>
 <head>
   <meta charset="utf-8">
-  <title>CareLocker Insurance Claim Notification</title>
+  <title>Care.locker Insurance Claim Notification</title>
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
-  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-    <!-- Header -->
-    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 24px; color: #ffffff;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 20px; font-weight: 700; letter-spacing: -0.5px;">🏥 CareLocker Claims Desk</span>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8F7FB; margin: 0; padding: 24px; color: #111111;">
+  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #E7E3EF; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
+    <!-- Brand Header -->
+    <div style="background-color: #111111; border-bottom: 3px solid #7956B5; padding: 24px 28px; color: #ffffff;">
+      <div style="display: flex; align-items: center;">
+        <span style="display: inline-block; background-color: #7956B5; color: #ffffff; font-weight: 800; font-size: 13px; padding: 4px 9px; border-radius: 8px; letter-spacing: -0.5px; margin-right: 10px;">cl</span>
+        <span style="font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">Care.locker</span>
       </div>
-      <p style="margin: 6px 0 0 0; font-size: 13px; color: #94a3b8;">
-        Patient Document & Insurance Query Management
+      <p style="margin: 6px 0 0 0; font-size: 11px; color: #B7A2DE; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;">
+        Claims & Document Operations Vault
       </p>
     </div>
 
-    <!-- Content -->
-    <div style="padding: 28px 24px; font-size: 14px;">
+    <!-- Content Body -->
+    <div style="padding: 32px 28px; font-size: 14px;">
       ${formattedBody}
 
-      <div style="margin-top: 24px; padding: 16px; background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px;">
-        <strong style="color: #1e3a8a; font-size: 13px;">Important Note:</strong>
-        <p style="margin: 4px 0 0 0; font-size: 12px; color: #1e40af; line-height: 1.5;">
-          Submitting the required documents promptly ensures uninterrupted cashless hospital approval or faster reimbursement processing.
+      <div style="margin-top: 24px; padding: 16px; background-color: #F2EEFA; border-left: 4px solid #7956B5; border-radius: 8px;">
+        <strong style="color: #7956B5; font-size: 13px;">Important Note for Faster Claim Settlement:</strong>
+        <p style="margin: 6px 0 0 0; font-size: 12px; color: #111111; line-height: 1.5;">
+          Submitting the requested medical documents promptly helps our billing team resolve the insurer's query without delay and prevents interruption to your cashless approval or reimbursement.
         </p>
       </div>
     </div>
 
-    <!-- Footer -->
-    <div style="padding: 18px 24px; background-color: #f1f5f9; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: center;">
-      CareLocker Automated Notification System • Confidential Medical Communication<br/>
-      Please do not reply directly to this automated email. Contact your hospital billing desk for assistance.
+    <!-- Clean Footer -->
+    <div style="padding: 20px 28px; background-color: #FAFAFC; border-top: 1px solid #E7E3EF; font-size: 11px; color: #6B7280; text-align: center; line-height: 1.6;">
+      Care.locker Automated Notification System • Confidential Medical Communication<br/>
+      Please do not reply directly to this automated email. Contact your hospital billing & TPA desk for assistance.
     </div>
   </div>
 </body>
@@ -117,7 +119,7 @@ export async function sendEmailMessage({
   if (!isEmailConfigured()) {
     return {
       success: false,
-      error: 'Gmail SMTP credentials are not configured in .env.local.',
+      error: 'Gmail SMTP credentials are not configured in environment.',
     };
   }
 
@@ -136,7 +138,7 @@ export async function sendEmailMessage({
     console.log(`[Nodemailer SMTP] Sending email to ${trimmedTo} with subject "${subject}"...`);
 
     const info = await transporter.sendMail({
-      from: fromAddress.includes('<') ? fromAddress : `CareLocker Claims Desk <${fromAddress}>`,
+      from: fromAddress.includes('<') ? fromAddress : `Care.locker Claims Desk <${fromAddress}>`,
       to: trimmedTo,
       subject,
       text,

@@ -86,7 +86,7 @@ export function getDecisionBadge(status: string) {
     case 'available':
       return { label: 'Available', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
     case 'missing':
-      return { label: 'Missing', bg: 'bg-peach-100', text: 'text-peach-700', border: 'border-peach-300' };
+      return { label: 'Missing', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' };
     case 'needs_review':
     default:
       return { label: 'Needs Review', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
