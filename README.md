@@ -38,7 +38,7 @@
 - **Channel Independence & Idempotency**: Failures on WhatsApp never block email dispatch and vice versa. Full delivery history and provider responses recorded in PostgreSQL.
 
 ### 4. 🎨 Modern Minimalist Interface
-- High-contrast, clean theme inspired by **Care.fi** (`#111111` deep darks, `#7956B5` brand purple, `#F2EEFA` soft surfaces, `#E7E3EF` borders) with zero noisy gradients.
+- High-contrast, clean theme (`#111111` deep darks, `#7956B5` brand purple, `#F2EEFA` soft surfaces, `#E7E3EF` borders) with zero noisy gradients.
 
 ---
 
