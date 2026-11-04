@@ -11,11 +11,13 @@ import {
   ExternalLink,
   Loader2,
   AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { DocumentCategory, DOCUMENT_CATEGORIES } from '@/types/database';
 import { Document } from '@/types';
 import { formatBytes, formatDate, getCategoryBadgeColor } from '@/lib/utils';
 import { Modal } from '@/components/common/Modal';
+import { DocumentSummaryModal } from '@/components/documents/DocumentSummaryModal';
 
 interface DocumentListProps {
   documents: Document[];
@@ -30,6 +32,7 @@ export function DocumentList({
 }: DocumentListProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [summaryDoc, setSummaryDoc] = useState<Document | null>(null);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [isLoadingSignedUrl, setIsLoadingSignedUrl] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -207,6 +210,15 @@ export function DocumentList({
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
+                          onClick={() => setSummaryDoc(doc)}
+                          title="View AI Clinical Summary"
+                          className="inline-flex items-center gap-1 rounded-lg border border-lavender-200 bg-lavender-50 px-2 py-1 text-[11px] font-semibold text-lavender-800 hover:bg-lavender-100 transition-colors shadow-2xs"
+                        >
+                          <Sparkles className="h-3 w-3 text-lavender-600" />
+                          <span>AI Summary</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handlePreview(doc)}
                           title="Preview Securely"
                           className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
@@ -357,6 +369,16 @@ export function DocumentList({
           </div>
         </div>
       </Modal>
+
+      {/* AI Clinical Summary Modal */}
+      <DocumentSummaryModal
+        document={summaryDoc}
+        isOpen={!!summaryDoc}
+        onClose={() => setSummaryDoc(null)}
+        onSummaryUpdated={() => {
+          onDocumentDeleted(); // Refresh list to get updated ai_summary
+        }}
+      />
     </div>
   );
 }

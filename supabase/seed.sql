@@ -80,13 +80,15 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Synthetic Query Letters (from Star Health / Medi Assist / Care Health)
-INSERT INTO public.query_letters (id, patient_id, file_path, file_name, status, created_at)
+INSERT INTO public.query_letters (id, patient_id, file_path, file_name, insurer_name, claim_number, status, created_at)
 VALUES
   (
     'q1111111-1111-1111-1111-111111111111',
     'a1111111-1111-1111-1111-111111111111',
     'queries/PAT-2026-001/StarHealth_QueryLetter_Claim_40912.pdf',
     'StarHealth_QueryLetter_Claim_40912.pdf',
+    'Star Health & Allied Insurance',
+    'CIR-40912-A',
     'completed',
     NOW() - INTERVAL '4 days'
   ),
@@ -95,13 +97,15 @@ VALUES
     'a2222222-2222-2222-2222-222222222222',
     'queries/PAT-2026-002/MediAssist_Query_Clarification_Req.pdf',
     'MediAssist_Query_Clarification_Req.pdf',
-    'uploaded',
+    'Medi Assist TPA',
+    'MED-88129',
+    'completed',
     NOW() - INTERVAL '2 days'
   )
 ON CONFLICT (id) DO NOTHING;
 
--- Synthetic Query Points
-INSERT INTO public.query_points (id, query_letter_id, requirement_text, document_category, decision_status, matched_document_id, evidence_quote)
+-- Synthetic Query Points with Multi-document Support and Reasoning
+INSERT INTO public.query_points (id, query_letter_id, requirement_text, document_category, decision_status, matched_document_id, matched_document_ids, evidence_quote, reasoning, confidence)
 VALUES
   (
     'p1111111-1111-1111-1111-111111111111',
@@ -110,7 +114,10 @@ VALUES
     'Investigation Reports',
     'missing',
     NULL,
-    'Clause 4.2 requires surgical notes and OT registrar log.'
+    '{}',
+    NULL,
+    'No surgical operative notes or indoor registrar records exist in the patient locker.',
+    0.98
   ),
   (
     'p2222222-2222-2222-2222-222222222222',
@@ -119,7 +126,10 @@ VALUES
     'Pharmacy Bills',
     'missing',
     NULL,
-    'Detailed invoice required for IV antibiotics and consumables.'
+    '{}',
+    NULL,
+    'Itemized pharmacy breakup invoices are absent from the patient document vault.',
+    0.99
   ),
   (
     'p3333333-3333-3333-3333-333333333333',
@@ -128,7 +138,10 @@ VALUES
     'Discharge Summary',
     'available',
     'd1111111-1111-1111-1111-111111111111',
-    'Matched Discharge_Summary_MaxHealthcare.pdf page 1-2.'
+    ARRAY['d1111111-1111-1111-1111-111111111111']::uuid[],
+    'Matched Discharge_Summary_MaxHealthcare.pdf: Diagnoses: Acute Calculus Cholecystitis, Hypertension. Signed by Dr. Vivek Mehra.',
+    'Discharge summary satisfies the requirement with physician signature and symptom timeline.',
+    0.97
   )
 ON CONFLICT (id) DO NOTHING;
 
@@ -153,3 +166,4 @@ VALUES
   ('UPLOAD_DOCUMENT', 'document', 'd1111111-1111-1111-1111-111111111111', '{"filename": "Discharge_Summary_MaxHealthcare.pdf", "category": "Discharge Summary"}'::jsonb, NOW() - INTERVAL '9 days'),
   ('UPLOAD_DOCUMENT', 'document', 'd2222222-2222-2222-2222-222222222222', '{"filename": "Final_Consolidated_Bill_Breakup.pdf", "category": "Hospital Bill"}'::jsonb, NOW() - INTERVAL '9 days'),
   ('UPLOAD_QUERY_LETTER', 'query_letter', 'q1111111-1111-1111-1111-111111111111', '{"insurer": "Star Health", "claim_id": "40912"}'::jsonb, NOW() - INTERVAL '4 days');
+

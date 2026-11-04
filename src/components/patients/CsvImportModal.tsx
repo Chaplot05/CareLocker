@@ -263,3 +263,4 @@ PAT-2026-103,Rohan Chawla,+91 97170 33445,rohan.chawla@example.com,1979-03-21`;
     </Modal>
   );
 }
+

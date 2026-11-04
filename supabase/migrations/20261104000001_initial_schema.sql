@@ -272,3 +272,4 @@ CREATE POLICY "Admins can delete documents"
   ON storage.objects FOR DELETE
   TO authenticated
   USING (bucket_id = 'patient-documents' AND public.is_admin());
+

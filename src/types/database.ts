@@ -34,7 +34,7 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
 export type DecisionStatus = 'available' | 'missing' | 'needs_review';
 export type MessageChannel = 'WhatsApp' | 'Email';
 export type MessageDeliveryStatus = 'queued' | 'sent' | 'delivered' | 'failed';
-export type QueryLetterStatus = 'uploaded' | 'processing' | 'completed' | 'failed';
+export type QueryLetterStatus = 'uploaded' | 'extracting' | 'matching' | 'completed' | 'failed';
 
 export interface Database {
   public: {
@@ -139,6 +139,11 @@ export interface Database {
           file_path: string;
           file_name: string;
           status: QueryLetterStatus;
+          error_message: string | null;
+          insurer_name: string | null;
+          claim_number: string | null;
+          extracted_at: string | null;
+          matched_at: string | null;
           created_at: string;
           uploaded_by: string | null;
         };
@@ -148,6 +153,11 @@ export interface Database {
           file_path: string;
           file_name: string;
           status?: QueryLetterStatus;
+          error_message?: string | null;
+          insurer_name?: string | null;
+          claim_number?: string | null;
+          extracted_at?: string | null;
+          matched_at?: string | null;
           created_at?: string;
           uploaded_by?: string | null;
         };
@@ -157,6 +167,11 @@ export interface Database {
           file_path?: string;
           file_name?: string;
           status?: QueryLetterStatus;
+          error_message?: string | null;
+          insurer_name?: string | null;
+          claim_number?: string | null;
+          extracted_at?: string | null;
+          matched_at?: string | null;
           created_at?: string;
           uploaded_by?: string | null;
         };
@@ -169,7 +184,10 @@ export interface Database {
           document_category: string;
           decision_status: DecisionStatus;
           matched_document_id: string | null;
+          matched_document_ids: string[];
           evidence_quote: string | null;
+          reasoning: string | null;
+          confidence: number | null;
           created_at: string;
         };
         Insert: {
@@ -179,7 +197,10 @@ export interface Database {
           document_category: string;
           decision_status?: DecisionStatus;
           matched_document_id?: string | null;
+          matched_document_ids?: string[];
           evidence_quote?: string | null;
+          reasoning?: string | null;
+          confidence?: number | null;
           created_at?: string;
         };
         Update: {
@@ -189,7 +210,10 @@ export interface Database {
           document_category?: string;
           decision_status?: DecisionStatus;
           matched_document_id?: string | null;
+          matched_document_ids?: string[];
           evidence_quote?: string | null;
+          reasoning?: string | null;
+          confidence?: number | null;
           created_at?: string;
         };
       };

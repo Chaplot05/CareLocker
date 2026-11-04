@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -20,10 +20,14 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
+  Plus,
+  Sparkles,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { DocumentList } from '@/components/documents/DocumentList';
+import { QueryLetterUploader } from '@/components/queries/QueryLetterUploader';
+import { QueryLetterDetail } from '@/components/queries/QueryLetterDetail';
 import { PatientDetail, Document } from '@/types';
 import { formatDate, formatDateTime, maskPhoneNumber, maskEmail, getDecisionBadge } from '@/lib/utils';
 
@@ -37,9 +41,10 @@ export default function PatientDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'agent'>('agent');
+  const [isQueryModalOpen, setIsQueryModalOpen] = useState(false);
 
-  const fetchPatient = useCallback(async () => {
-    setIsLoading(true);
+  const fetchPatient = useCallback(async (isSilent = false) => {
+    if (!isSilent) setIsLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/patients/${id}`);
@@ -53,7 +58,7 @@ export default function PatientDetailPage() {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
   }, [id]);
 
@@ -62,6 +67,21 @@ export default function PatientDetailPage() {
       fetchPatient();
     }
   }, [id, fetchPatient]);
+
+  // Live polling: if any query letter is extracting or matching, refresh silently every 3s
+  useEffect(() => {
+    const hasActiveProcessing = patient?.query_letters?.some(
+      (l) => l.status === 'extracting' || l.status === 'matching'
+    );
+
+    if (!hasActiveProcessing) return;
+
+    const interval = setInterval(() => {
+      fetchPatient(true);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [patient?.query_letters, fetchPatient]);
 
   if (isLoading) {
     return (
@@ -174,7 +194,7 @@ export default function PatientDetailPage() {
             onClick={() => setActiveTab('documents')}
             className={`flex items-center gap-2 pb-3 border-b-2 transition-all ${
               activeTab === 'documents'
-                ? 'border-peach-500 text-slate-900'
+                ? 'border-peach-500 text-slate-900 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-700'
             }`}
           >
@@ -186,7 +206,7 @@ export default function PatientDetailPage() {
             onClick={() => setActiveTab('queries')}
             className={`flex items-center gap-2 pb-3 border-b-2 transition-all ${
               activeTab === 'queries'
-                ? 'border-peach-500 text-slate-900'
+                ? 'border-peach-500 text-slate-900 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-700'
             }`}
           >
@@ -198,7 +218,7 @@ export default function PatientDetailPage() {
             onClick={() => setActiveTab('audit')}
             className={`flex items-center gap-2 pb-3 border-b-2 transition-all ${
               activeTab === 'audit'
-                ? 'border-peach-500 text-slate-900'
+                ? 'border-peach-500 text-slate-900 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-700'
             }`}
           >
@@ -214,7 +234,7 @@ export default function PatientDetailPage() {
           <DocumentUploader
             patientId={patient.id}
             patientCode={patient.patient_code}
-            onUploadComplete={fetchPatient}
+            onUploadComplete={() => fetchPatient()}
           />
 
           <div>
@@ -223,86 +243,80 @@ export default function PatientDetailPage() {
             </h3>
             <DocumentList
               documents={patient.documents || []}
-              onDocumentDeleted={fetchPatient}
+              onDocumentDeleted={() => fetchPatient()}
               userRole={userRole}
             />
           </div>
         </div>
       )}
 
-      {/* Tab 2: Insurance Query History */}
+      {/* Tab 2: Insurance Query History (Stage 2) */}
       {activeTab === 'queries' && (
         <div className="space-y-6">
-          {(!patient.query_letters || patient.query_letters.length === 0) ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
-              <div className="rounded-full bg-slate-50 p-3 text-slate-400 mb-3 mx-auto w-fit border border-slate-100">
-                <FileQuestion className="h-8 w-8" />
-              </div>
-              <h4 className="text-sm font-semibold text-slate-800">No Query Letters Yet</h4>
-              <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                Insurance query letters received for this patient will be processed in Stage 2.
-                The database schema and relation tables (<code className="font-mono text-slate-600">query_letters</code>, <code className="font-mono text-slate-600">query_points</code>, and <code className="font-mono text-slate-600">messages</code>) are already fully structured and ready.
+          {/* Query Action Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm">
+                Insurance Query Letters & AI Adjudication
+              </h3>
+              <p className="text-xs text-slate-500">
+                Upload insurer query letters for automatic requirement extraction, forensic document matching, and patient drafting.
               </p>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {patient.query_letters.map((letter) => (
-                <div
-                  key={letter.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-lavender-700" />
-                      <span className="font-semibold text-slate-900 text-sm">{letter.file_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-400">{formatDate(letter.created_at)}</span>
-                      <span className="rounded-full bg-lavender-100 px-2 py-0.5 text-[10px] font-bold text-lavender-800 uppercase tracking-wider">
-                        {letter.status}
-                      </span>
-                    </div>
-                  </div>
+            <button
+              type="button"
+              onClick={() => setIsQueryModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-4 py-2 text-xs font-semibold text-white hover:bg-peach-600 shadow-sm transition-all shrink-0 active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Upload Query Letter</span>
+            </button>
+          </div>
 
-                  {/* Query Points List */}
-                  {letter.query_points && letter.query_points.length > 0 ? (
-                    <div className="space-y-2">
-                      <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Insurer Document Requirements & AI Match Status
-                      </h5>
-                      <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden text-xs">
-                        {letter.query_points.map((pt) => {
-                          const badge = getDecisionBadge(pt.decision_status);
-                          return (
-                            <div key={pt.id} className="p-3 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                              <div className="space-y-1">
-                                <p className="font-medium text-slate-800">{pt.requirement_text}</p>
-                                <span className="inline-block font-mono text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                  Required Category: {pt.document_category}
-                                </span>
-                                {pt.evidence_quote && (
-                                  <p className="text-[11px] text-slate-500 italic">
-                                    Evidence: &quot;{pt.evidence_quote}&quot;
-                                  </p>
-                                )}
-                              </div>
-                              <span
-                                className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold shrink-0 ${badge.bg} ${badge.text} ${badge.border}`}
-                              >
-                                {badge.label}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 italic">No query points extracted.</p>
-                  )}
-                </div>
+          {(!patient.query_letters || patient.query_letters.length === 0) ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
+              <div className="rounded-full bg-peach-50 p-3 text-peach-600 mb-3 mx-auto w-fit border border-peach-200 shadow-2xs">
+                <FileQuestion className="h-8 w-8" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-800">No Query Letters Uploaded</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 mb-4">
+                Whenever Star Health, Medi Assist, Care, or other TPAs raise queries, upload the letter here.
+                Gemini will extract every requirement, match against vault documents, and draft a patient WhatsApp request.
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsQueryModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-peach-500 px-4 py-2 text-xs font-semibold text-white hover:bg-peach-600 shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Upload First Query Letter</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {patient.query_letters.map((letter) => (
+                <QueryLetterDetail
+                  key={letter.id}
+                  queryLetter={letter}
+                  messages={patient.messages || []}
+                  patientName={patient.name}
+                  onRefresh={() => fetchPatient()}
+                  userRole={userRole}
+                />
               ))}
             </div>
           )}
+
+          {/* Upload Query Letter Modal */}
+          <QueryLetterUploader
+            patientId={patient.id}
+            patientCode={patient.patient_code}
+            isOpen={isQueryModalOpen}
+            onClose={() => setIsQueryModalOpen(false)}
+            onUploadSuccess={() => {
+              fetchPatient();
+            }}
+          />
         </div>
       )}
 

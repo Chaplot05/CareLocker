@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, isSupabaseServerConfigured } from '@/lib/supabase/server';
 import { DOCUMENT_CATEGORIES, DocumentCategory } from '@/types/database';
+import { analyzePatientDocument } from '@/lib/gemini/documentUnderstanding';
 
 const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
@@ -110,7 +111,6 @@ export async function POST(request: NextRequest) {
 
     if (dbError) {
       console.error('Database insert error for document:', dbError);
-      // Clean up storage file if DB insert failed
       await supabase.storage.from('patient-documents').remove([storagePath]);
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
@@ -128,6 +128,15 @@ export async function POST(request: NextRequest) {
         patient_code: patient.patient_code,
       },
     } as any);
+
+    // Feature 1: Trigger Document Understanding in background (or inline)
+    try {
+      analyzePatientDocument(document.id, supabase).catch((aiErr) => {
+        console.warn('Background AI document analysis notice:', aiErr.message);
+      });
+    } catch (err) {
+      console.warn('Non-blocking AI document analysis trigger error:', err);
+    }
 
     return NextResponse.json({ document }, { status: 201 });
   } catch (err: any) {

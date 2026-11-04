@@ -51,6 +51,20 @@ export async function GET(
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 });
     }
 
+    // Enrich query points with matched supporting documents
+    const docMap = new Map((patient.documents || []).map((d: any) => [d.id, d]));
+    const enrichedQueryLetters = (patient.query_letters || []).map((letter: any) => ({
+      ...letter,
+      query_points: (letter.query_points || []).map((pt: any) => {
+        const docIds: string[] = pt.matched_document_ids || (pt.matched_document_id ? [pt.matched_document_id] : []);
+        const matched_documents = docIds.map((docId) => docMap.get(docId)).filter(Boolean);
+        return {
+          ...pt,
+          matched_documents,
+        };
+      }),
+    }));
+
     // Fetch audit logs for this patient
     const { data: auditLogs } = (await supabase
       .from('audit_logs')
@@ -61,6 +75,7 @@ export async function GET(
     return NextResponse.json({
       patient: {
         ...patient,
+        query_letters: enrichedQueryLetters,
         audit_logs: auditLogs || [],
       },
     });

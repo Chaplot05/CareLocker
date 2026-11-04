@@ -1,20 +1,20 @@
 # CareLocker 🏥🔐
 ### Patient Document Management & Insurance Query Automation Platform
 
-CareLocker is an enterprise healthcare SaaS application built for hospital billing, TPA desk staff, and insurance operations teams. It streamlines patient document storage, validates claim documentation against insurer queries, and prepares automated communications to resolve query letters rapidly.
+CareLocker is an enterprise healthcare SaaS application built for hospital billing, TPA desk staff, and insurance operations teams. It streamlines patient document storage, analyzes medical records using multimodal AI, extracts discrete requirements from insurer query letters, matches requirements against existing vault documents, and drafts patient-friendly notifications.
 
 ---
 
 ## 📑 Table of Contents
 1. [Architecture & Technology Stack](#-architecture--technology-stack)
-2. [Stage 1 Implementation Overview](#-stage-1-implementation-overview)
-3. [Folder Structure](#-folder-structure)
-4. [Database Design & Migrations](#-database-design--migrations)
-5. [Setup & Installation](#-setup--installation)
-6. [How to Create the First Admin Account](#-how-to-create-the-first-admin-account)
-7. [Running the Synthetic Seeder](#-running-the-synthetic-seeder)
-8. [Security & Role-Based Access Control](#-security--role-based-access-control)
-9. [Future Stage 2 Roadmap](#-future-stage-2-roadmap)
+2. [Stage 1: Foundation & Vault](#-stage-1-foundation--vault)
+3. [Stage 2: Complete AI Processing Engine](#-stage-2-complete-ai-processing-engine)
+4. [Folder Structure](#-folder-structure)
+5. [Database Migrations](#-database-migrations)
+6. [Setup & Environment Variables](#-setup--environment-variables)
+7. [Running the Test Suite](#-running-the-test-suite)
+8. [First Admin Account Guide](#-first-admin-account-guide)
+9. [Future Stage 3 Roadmap](#-future-stage-3-roadmap)
 
 ---
 
@@ -24,50 +24,67 @@ CareLocker is an enterprise healthcare SaaS application built for hospital billi
 - **Language**: TypeScript (Strict typing)
 - **Styling**: Tailwind CSS (Custom palette: Crisp White, Light Lavender `#8462e7`, Reddish Peach `#ea4f3f`, Clean Slate Grey)
 - **Icons**: Lucide React
-- **Database**: Supabase PostgreSQL
+- **Database & Storage**: Supabase PostgreSQL & Private Supabase Storage (`patient-documents`)
 - **Authentication**: Supabase Auth (Email & Password, Session Cookies via `@supabase/ssr`)
-- **Storage**: Private Supabase Storage Bucket (`patient-documents`) with short-lived Signed URLs
-- **CSV Processing**: PapaParse with runtime schema validation via Zod
-- **Deployment**: Vercel ready
+- **AI Processing Engine (Stage 2)**: Google Gemini API (Multimodal SDK `@google/genai` & `@google/generative-ai`)
+- **Schema Validation**: Zod runtime validation
+- **CSV Processing**: PapaParse
 
 ---
 
-## 🚀 Stage 1 Implementation Overview
+## 🚀 Stage 1: Foundation & Vault
 
-### 1. Staff Authentication & Access Control
-- Staff login with email and password via Supabase Auth.
-- Two distinct roles: **Admin** (full permissions including document & patient deletion) and **Agent** (daily operations, uploads, viewing).
-- Protected dashboard routes via Next.js Edge Middleware (`/dashboard`, `/patients`, `/settings`).
-- Zero public self-registration (staff accounts must be provisioned through authorized channels).
-- No secrets exposed to client-side code.
+- **Staff Authentication**: Role-based access control with `Admin` and `Agent` roles.
+- **Route Protection**: Next.js Edge Middleware guarding `/dashboard`, `/patients`, `/settings`.
+- **Patient Management**: Searchable directory, masked contact info toggle, manual creation with code generator (`PAT-YYYY-XXX`), and bulk CSV import.
+- **Document Locker**: Multi-file drag & drop, 9 medical categories, validation, short-lived signed URLs (5-minute expiry), and admin deletion.
 
-### 2. Patient Directory Management
-- Searchable patient listing by full name, unique patient code, or email.
-- Register individual patients with automatic code generator (`PAT-YYYY-XXX`).
-- Edit patient contact details and demographics.
-- Masked phone numbers and email addresses in UI with a one-click reveal toggle for privacy.
-- Bulk CSV Import with client-side preview, validation against duplicate patient codes in DB and file, and error reporting.
+---
 
-### 3. Patient Document Locker
-- Upload single or multiple files in drag-and-drop zone.
-- Supported file types: **PDF, JPG, JPEG, PNG** (up to 20MB per file).
-- 9 distinct healthcare document categories:
-  - `Discharge Summary`
-  - `Hospital Bill`
-  - `Investigation Reports`
-  - `Policy Copy`
-  - `KYC`
-  - `Consultation Papers`
-  - `Pharmacy Bills`
-  - `Cancelled Cheque`
-  - `Other`
-- Private storage in Supabase Storage bucket (`patient-documents`) with **zero public URLs**.
-- Temporary signed URL generation (5-minute expiry) for inline document preview and download.
-- Role-restricted deletion (Admin only) with confirmation dialog.
+## 🤖 Stage 2: Complete AI Processing Engine
 
-### 4. Audit Logging & History
-- Persistent audit logs recording all patient creations, updates, document uploads, document deletions, and CSV imports with user ID and timestamp.
-- Query history section on patient profile ready for Stage 2 AI matching.
+### Feature 1 — Document Understanding
+- Whenever medical documents (PDFs, JPG, PNG) are uploaded to the vault, the server retrieves the file from private Supabase Storage.
+- Gemini multimodal AI analyzes clinical and billing contents without hallucinations.
+- Extracts:
+  - Document type & category
+  - Patient identifiers (hospital ID, UHID, policy number, claim number)
+  - Crucial dates (admission, discharge, bill, report dates)
+  - Hospital name & treating consultant
+  - Total billing amounts (claimed, paid, discounts)
+  - Clinical diagnoses, surgical procedures, and key findings
+  - Insurance claim relevance
+- Validated with Zod and saved in `documents.ai_summary` (JSONB).
+- Viewable in the UI via the **"AI Summary"** button on any document.
+
+### Feature 2 — Query Requirement Extraction
+- Upload insurer query letters from Star Health, Medi Assist, Care Health, HDFC Ergo, etc.
+- Gemini multimodal parses the original PDF/image.
+- Extracts every distinct requirement, preserving the **exact verbatim text**.
+- Maps each requirement to the expected document category and context reason.
+- Saved into `query_points`.
+
+### Feature 3 — Document Matching Adjudication
+- Compares each query requirement against all patient document summaries.
+- Adjudication rules:
+  - **Never marks available by category alone**. Verifies factual content, dates, and invoice details.
+  - Returns `available` only when satisfied with verifiable evidence quotes.
+  - **Multi-document support**: Satisfied across multiple separate files (e.g. OT surgical note + Anesthesia log).
+  - Returns `missing` if the item is absent from the vault.
+  - Returns `needs_review` if wording is ambiguous, contradictory, or requires consultant justification.
+  - Includes confidence score (0.0 to 1.0) and forensic reasoning.
+
+### Feature 4 — Results UI
+- Query letter dashboard in patient profile with real-time status transitions: `uploaded` → `extracting` → `matching` → `completed` / `failed`.
+- Summary scoreboard: Total, Available, Missing, and Needs Review counts.
+- Interactive requirements list with status badges, category tags, evidence blockquotes, medical reasoning, and clickable supporting document pills opening secure preview modals.
+- Safe retry button (`/api/queries/[id]/reprocess`) to re-evaluate letters idempotently.
+
+### Feature 5 — Patient Notification Draft
+- Automatically drafts an empathetic, plain-language patient request.
+- **Requests ONLY genuinely missing items**; excludes available and uncertain (`needs_review`) items.
+- In-app preview with 1-click **"Copy Message"**, **"Regenerate Draft"**, and **"Edit Draft"**.
+- Prepares for automated WhatsApp/Email dispatch in Stage 3.
 
 ---
 
@@ -75,152 +92,105 @@ CareLocker is an enterprise healthcare SaaS application built for hospital billi
 
 ```
 carelocker/
-├── public/                     # Static assets
 ├── scripts/
-│   └── seed.mjs                # Standalone synthetic database seeder script
+│   ├── seed.mjs                                 # Synthetic DB seeder
+│   └── test-stage2.ts                           # Comprehensive Stage 2 test suite
 ├── src/
 │   ├── app/
-│   │   ├── (auth)/
-│   │   │   └── login/          # Staff login page
+│   │   ├── (auth)/login/page.tsx                # Staff login & admin setup guide
 │   │   ├── (dashboard)/
-│   │   │   ├── dashboard/      # Main dashboard with live statistics & recent uploads
-│   │   │   ├── patients/       # Patients directory & search
-│   │   │   │   ├── [id]/       # Individual patient profile, locker, & query tabs
-│   │   │   │   │   └── edit/   # Edit patient details
-│   │   │   │   └── new/        # Register new patient
-│   │   │   ├── settings/       # Staff profile, RBAC guide & setup info
-│   │   │   └── layout.tsx      # Dashboard shell with persistent sidebar
+│   │   │   ├── dashboard/page.tsx               # Analytics dashboard
+│   │   │   ├── patients/page.tsx                # Directory & CSV import
+│   │   │   ├── patients/[id]/page.tsx           # Profile, Locker & Query History
+│   │   │   └── settings/page.tsx                # RBAC & Gemini status
 │   │   ├── api/
-│   │   │   ├── auth/           # Staff login & signout routes
-│   │   │   ├── documents/      # Upload and delete document endpoints
-│   │   │   │   └── [id]/       # Temporary signed URL generator
-│   │   │   └── patients/       # Patient CRUD and CSV bulk import
-│   │   │       ├── [id]/
-│   │   │       └── import/
-│   │   ├── globals.css         # Tailwind & custom color styles
-│   │   ├── layout.tsx          # Root layout
-│   │   └── page.tsx            # Root redirect to /dashboard
+│   │   │   ├── documents/route.ts               # Upload & AI analysis trigger
+│   │   │   ├── documents/[id]/analyze/route.ts  # Manual re-analyze endpoint
+│   │   │   ├── queries/route.ts                 # Upload & pipeline trigger
+│   │   │   ├── queries/[id]/route.ts            # Query details & admin delete
+│   │   │   ├── queries/[id]/draft/route.ts      # Regenerate & edit draft message
+│   │   │   └── queries/[id]/reprocess/route.ts  # Safe retry mechanism
 │   ├── components/
-│   │   ├── common/             # Modal, ConfigAlert, UI elements
-│   │   ├── documents/          # DocumentUploader, DocumentList
-│   │   ├── layout/             # Sidebar, Header
-│   │   └── patients/           # PatientForm, CsvImportModal
+│   │   ├── documents/
+│   │   │   ├── DocumentList.tsx                 # Locker table with AI Summary button
+│   │   │   └── DocumentSummaryModal.tsx         # AI Clinical Summary viewer
+│   │   └── queries/
+│   │       ├── QueryLetterUploader.tsx          # Query letter upload modal
+│   │       └── QueryLetterDetail.tsx            # Adjudication cards & draft message
 │   ├── lib/
-│   │   ├── supabase/           # Server, Client, Admin, and Middleware helpers
-│   │   └── utils.ts            # Formatting, masking, and badge styling
-│   ├── middleware.ts           # Route protection middleware
+│   │   ├── gemini/
+│   │   │   ├── client.ts                        # Gemini SDK & multimodal caller
+│   │   │   ├── schemas.ts                       # Zod validation schemas
+│   │   │   ├── documentUnderstanding.ts         # Feature 1: Clinical extractor
+│   │   │   ├── queryExtraction.ts               # Feature 2: Requirements extractor
+│   │   │   ├── documentMatching.ts              # Feature 3: Forensic matcher
+│   │   │   ├── messageDrafting.ts               # Feature 5: Patient message drafter
+│   │   │   └── pipeline.ts                      # Pipeline orchestrator
 │   └── types/
-│       ├── database.ts         # Supabase PostgreSQL schema definitions
-│       └── index.ts            # Application & UI models
-├── supabase/
-│   ├── migrations/
-│   │   └── 20261104000001_initial_schema.sql  # Complete Stage 1 migration SQL
-│   └── seed.sql                # Synthetic seed SQL for SQL Editor
-├── .env.example                # Variable names template
-├── package.json
-├── tailwind.config.js
-└── tsconfig.json
+│       ├── database.ts                          # Supabase PostgreSQL schema
+│       └── index.ts                             # Application types
+└── supabase/
+    └── migrations/
+        ├── 20261104000001_initial_schema.sql    # Stage 1 tables & RLS
+        └── 20261104000002_stage2_query_matching.sql # Stage 2 status & multi-doc support
 ```
 
 ---
 
-## 🗄 Database Design & Migrations
+## ⚙ Setup & Environment Variables
 
-The database migration is located at:
-`supabase/migrations/20261104000001_initial_schema.sql`
-
-It provisions:
-
-| Table | Purpose | RLS Access |
-|---|---|---|
-| `profiles` | Staff users (`admin` or `agent`) linked to `auth.users` | Read: Staff, Update: Self or Admin |
-| `patients` | Patient demographics, contact info, unique `patient_code` | Read/Write: Staff, Delete: Admin |
-| `documents` | Metadata for uploaded medical documents, private file path | Read/Upload: Staff, Delete: Admin |
-| `query_letters` | Insurance queries uploaded from TPAs / insurers | Read/Write: Staff |
-| `query_points` | Specific document requirements & match decisions | Read/Write: Staff |
-| `messages` | Patient notification logs (WhatsApp / Email) | Read/Write: Staff |
-| `audit_logs` | Security trail of all user actions and operations | Read/Write: Authenticated Staff |
-
-### Storage Bucket:
-- Bucket name: `patient-documents`
-- Visibility: **Private** (`public: false`)
-- Allowed MIME types: `application/pdf`, `image/jpeg`, `image/jpg`, `image/png`
-- Max file size: 20 MB
-
----
-
-## ⚙ Setup & Installation
-
-### 1. Prerequisites
-- Node.js 18+ or 20+
-- npm or pnpm
-
-### 2. Configure Environment Variables
-Create a file named `.env.local` in the project root:
+Copy `.env.example` to `.env.local`:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+# Stage 2: Google Gemini Multimodal AI
+GEMINI_API_KEY=AIzaSy...
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-### 3. Run Database Migrations in Supabase
-1. Open your Supabase Dashboard → **SQL Editor**.
-2. Copy and paste the contents of `supabase/migrations/20261104000001_initial_schema.sql`.
-3. Click **Run**. This creates all tables, triggers, Row Level Security policies, indexes, and the private storage bucket.
+Execute both migrations in Supabase SQL Editor:
+1. `supabase/migrations/20261104000001_initial_schema.sql`
+2. `supabase/migrations/20261104000002_stage2_query_matching.sql`
 
 ---
 
-## 🔑 How to Create the First Admin Account
+## 🧪 Running the Test Suite
 
-To keep the application secure and prevent open public registrations:
+Execute the Stage 2 AI validation test suite:
 
-1. In Supabase Dashboard, navigate to **Authentication → Users**.
-2. Click **Add user** → **Create user**.
-3. Enter your administrator email and a strong password (e.g. `admin@carelocker.health`).
-4. Next, open the **SQL Editor** in Supabase and execute:
+```bash
+npm test
+```
+
+Runs 18 unit tests validating:
+- Feature 1: Document understanding schema & clinical/billing extraction
+- Feature 2: Query requirement separation, verbatim text preservation
+- Feature 3: Multi-document matching, evidence quotes, ambiguous `needs_review`
+- Feature 5: Patient message drafting requesting **only missing items**
+
+---
+
+## 🔑 First Admin Account Guide
+
+1. Go to **Supabase Console → Authentication → Users → Add User**.
+2. Enter email (e.g. `admin@carelocker.health`) and password.
+3. In SQL Editor, run:
    ```sql
    UPDATE public.profiles
    SET role = 'admin', full_name = 'Hospital Administrator'
    WHERE email = 'admin@carelocker.health';
    ```
-5. You can now log into CareLocker at `http://localhost:3000/login` with full administrator privileges!
+4. Log in at `http://localhost:3000/login`.
 
 ---
 
-## 🧪 Running the Synthetic Seeder
+## 🔮 Future Stage 3 Roadmap
 
-To seed realistic Indian hospital insurance cases (Star Health, Medi Assist query letters, synthetic patients, and documents):
-
-### Option A: Using the Node script
-```bash
-npm run seed
-```
-
-### Option B: Using SQL Editor
-Copy and execute `supabase/seed.sql` in your Supabase SQL Editor.
-
----
-
-## 🛡 Security & Role-Based Access Control
-
-- **Row Level Security (RLS)** is enabled on all tables.
-- **Signed URLs**: Documents are stored in a private bucket with zero public permissions. Temporary signed URLs expire in 5 minutes.
-- **Data Masking**: Phone numbers and emails are masked in the UI (`+91 982•• ••521`) to protect sensitive patient records.
-- **Audit Logging**: Every patient creation, update, document upload, and document deletion is logged in `audit_logs`.
-
----
-
-## 🔮 Future Stage 2 Roadmap
-
-The database schema and architecture are pre-built to support the upcoming stages without restructuring:
-
-1. **Google Gemini AI Integration**:
-   - Extract text from insurance query letters.
-   - Automatically identify missing requirements and populate `query_points`.
-   - Match insurer queries against patient's existing `documents`.
-2. **Automated Messaging**:
-   - Twilio WhatsApp Sandbox integration.
-   - Nodemailer with Gmail SMTP.
-   - Record notifications directly into the `messages` table.
+- **Twilio WhatsApp Sandbox**: Direct 1-click dispatch of the generated patient draft message.
+- **Nodemailer / Gmail SMTP**: Automated email notification dispatch.
+- **Delivery Webhooks**: Real-time status tracking (`sent`, `delivered`, `read`) in `messages`.

@@ -9,13 +9,19 @@ import {
   Server,
   Terminal,
   ExternalLink,
+  Sparkles,
+  Bot,
+  Cpu,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { createClient, isSupabaseServerConfigured } from '@/lib/supabase/server';
 import { ConfigAlert } from '@/components/common/ConfigAlert';
+import { isGeminiConfigured, getGeminiModel } from '@/lib/gemini/client';
 
 export default async function SettingsPage() {
   const isConfigured = isSupabaseServerConfigured();
+  const hasGemini = isGeminiConfigured();
+  const geminiModel = getGeminiModel();
 
   let userProfile: any = null;
   let userEmail = 'Not Authenticated';
@@ -28,11 +34,11 @@ export default async function SettingsPage() {
 
     if (user) {
       userEmail = user.email || '';
-      const { data: profile } = await supabase
+      const { data: profile } = (await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .single()) as { data: any };
       userProfile = profile;
     }
   }
@@ -40,18 +46,82 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <Header
-        title="Settings & Security"
-        subtitle="Manage hospital staff roles, database connectivity, and data protection policies."
+        title="Settings & AI System Configuration"
+        subtitle="Manage hospital staff roles, database connectivity, and the Google Gemini AI processing engine."
         showAddPatient={false}
       />
 
-      {!isConfigured && <ConfigAlert />}
+      {(!isConfigured || !hasGemini) && <ConfigAlert />}
+
+      {/* Stage 2 Gemini AI Engine Status */}
+      <div className="rounded-2xl border border-lavender-200/90 bg-white p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-lavender-100 p-2.5 text-lavender-700">
+              <Bot className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Google Gemini AI Engine (Stage 2)</h2>
+              <p className="text-xs text-slate-400">Multimodal document understanding, query extraction & matching</p>
+            </div>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
+              hasGemini
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                : 'bg-peach-100 text-peach-700 border border-peach-200'
+            }`}
+          >
+            {hasGemini ? 'Active & Ready' : 'Key Missing'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+            <span className="text-slate-400 uppercase font-semibold text-[10px] block">Model in Use</span>
+            <span className="font-mono font-bold text-slate-800 text-xs mt-0.5 block flex items-center gap-1.5">
+              <Cpu className="h-3.5 w-3.5 text-lavender-600" />
+              {geminiModel}
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+            <span className="text-slate-400 uppercase font-semibold text-[10px] block">Multimodal Engine</span>
+            <span className="font-medium text-slate-800 text-xs mt-0.5 block">
+              PDF, JPEG, JPG, PNG
+            </span>
+          </div>
+
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+            <span className="text-slate-400 uppercase font-semibold text-[10px] block">Pipeline Modules</span>
+            <span className="font-medium text-slate-800 text-xs mt-0.5 block">
+              Extract • Match • Draft
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-lavender-50/60 p-4 border border-lavender-100 text-xs text-slate-700 space-y-1.5">
+          <span className="font-semibold text-lavender-950 block">AI Processing Guarantees:</span>
+          <p className="text-slate-600">
+            • <strong>Never marks available by category alone</strong>: Compares actual clinical text, invoice breakups, and dates.
+          </p>
+          <p className="text-slate-600">
+            • <strong>Multi-document Support</strong>: Identifies when requirements are satisfied across multiple separate files.
+          </p>
+          <p className="text-slate-600">
+            • <strong>Zero Hallucinations</strong>: If facts are ambiguous or contradictory, marks <code className="bg-white px-1 py-0.5 rounded font-mono text-amber-800 border border-amber-200">needs_review</code>.
+          </p>
+          <p className="text-slate-600">
+            • <strong>Patient Messages</strong>: Requests <strong className="text-peach-700">ONLY genuinely missing items</strong>, omitting already available documents.
+          </p>
+        </div>
+      </div>
 
       {/* Staff Account Info */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-lavender-100 p-2 text-lavender-700">
+            <div className="rounded-xl bg-slate-100 p-2 text-slate-700">
               <UserCheck className="h-5 w-5" />
             </div>
             <div>
@@ -122,11 +192,11 @@ export default async function SettingsPage() {
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-peach-600 shrink-0" />
-                <span>Bulk CSV patient batch import</span>
+                <span>Trigger and reprocess AI query letter evaluations</span>
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-peach-600 shrink-0" />
-                <span>View full audit trails across all staff actions</span>
+                <span>Delete query letters and review audit trails</span>
               </li>
             </ul>
           </div>
@@ -145,56 +215,17 @@ export default async function SettingsPage() {
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-lavender-700 shrink-0" />
-                <span>Upload patient documents into private storage</span>
+                <span>Upload documents & trigger automated AI summaries</span>
               </li>
               <li className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-lavender-700 shrink-0" />
-                <span>Preview and download documents via signed URLs</span>
+                <span>Upload query letters & view AI matching results</span>
               </li>
               <li className="flex items-center gap-1.5 text-slate-400">
                 <span className="h-3.5 w-3.5 shrink-0 text-center font-bold">✕</span>
-                <span>Cannot delete existing documents or patients</span>
+                <span>Cannot delete existing documents or query letters</span>
               </li>
             </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* Guide: How to create Admin / Agent Staff */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs space-y-4">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="rounded-xl bg-slate-100 p-2 text-slate-700">
-            <Key className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Provisioning New Staff Accounts</h3>
-            <p className="text-xs text-slate-400">Restricted onboarding via Supabase Auth</p>
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-600 leading-relaxed">
-          In compliance with healthcare data protection standards, public self-registration is disabled. 
-          To add staff members:
-        </p>
-
-        <div className="rounded-xl bg-slate-50 p-4 border border-slate-200 text-xs text-slate-700 space-y-3 font-mono">
-          <div>
-            <p className="text-slate-500 font-sans font-semibold mb-1">1. Create user in Supabase Authentication:</p>
-            <p className="text-slate-800">Supabase Console → Authentication → Users → Add User</p>
-          </div>
-          <div>
-            <p className="text-slate-500 font-sans font-semibold mb-1">2. Assign Admin or Agent role via SQL:</p>
-            <pre className="rounded bg-white p-3 text-[11px] text-slate-900 border border-slate-200 overflow-x-auto select-all">
-{`-- For Administrator:
-UPDATE public.profiles
-SET role = 'admin', full_name = 'Dr. Aditi Mukherjee'
-WHERE email = 'aditi@hospital.org';
-
--- For Desk Agent:
-UPDATE public.profiles
-SET role = 'agent', full_name = 'Karan Singh'
-WHERE email = 'karan@hospital.org';`}
-            </pre>
           </div>
         </div>
       </div>
