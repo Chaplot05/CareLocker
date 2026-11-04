@@ -174,7 +174,7 @@ export async function dispatchQueryNotification({
       const configuredContentSid = (process.env.TWILIO_CONTENT_SID || '').trim();
       const hasValidContentSid = configuredContentSid.startsWith('HX');
 
-      const waRes: WhatsAppSendResult = await sendWhatsAppMessage({
+      let waRes: WhatsAppSendResult = await sendWhatsAppMessage({
         to: patient.phone,
         body: messageContent,
         contentSid: hasValidContentSid ? configuredContentSid : undefined,
@@ -182,6 +182,14 @@ export async function dispatchQueryNotification({
           ? { '1': patient.name, '2': patient.patient_code }
           : undefined,
       });
+
+      if (!waRes.success && waRes.errorCode === 21655) {
+        console.log('[Dispatcher] ContentSid 21655 rejected. Gracefully retrying with direct free-form body...');
+        waRes = await sendWhatsAppMessage({
+          to: patient.phone,
+          body: messageContent,
+        });
+      }
 
       if (waRes.success && waRes.messageSid) {
         await adminSupabase
